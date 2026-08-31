@@ -348,6 +348,8 @@ pci_reg_write(uint16_t port, uint8_t val)
     }
 
     slot = pci_card_to_slot_mapping[pci_bus_number_to_index_mapping[pci_bus]][pci_card];
+    if (chipset_mon_enabled && (slot != PCI_CARD_INVALID))
+        chipset_mon_pci_inc(slot);
     if (slot != PCI_CARD_INVALID) {
         if (pci_cards[slot].write)
             pci_cards[slot].write(pci_func, pci_index | (port & 0x03), pci_access_len, val, pci_cards[slot].priv);
@@ -582,6 +584,8 @@ pci_reg_read(uint16_t port)
     }
 
     slot = pci_card_to_slot_mapping[pci_bus_number_to_index_mapping[pci_bus]][pci_card];
+    if (chipset_mon_enabled && (slot != PCI_CARD_INVALID))
+        chipset_mon_pci_inc(slot);
     if (slot != PCI_CARD_INVALID) {
         if (pci_cards[slot].read)
             ret = pci_cards[slot].read(pci_func, pci_index | (port & 0x03), pci_access_len, pci_cards[slot].priv);

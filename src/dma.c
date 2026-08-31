@@ -2256,6 +2256,9 @@ dma_channel_read(int channel)
     int type;
     int tc;
 
+    if (chipset_mon_enabled)
+        chipset_mon_dma_inc(channel);
+
     if (!dma_xt8237_active())
         return dma_channel_read_legacy(channel);
 
@@ -2299,6 +2302,9 @@ dma_channel_write(int channel, uint16_t val)
     dma_t *dma_c;
     int type;
     int tc;
+
+    if (chipset_mon_enabled)
+        chipset_mon_dma_inc(channel);
 
     if (!dma_xt8237_active())
         return dma_channel_write_legacy(channel, val);

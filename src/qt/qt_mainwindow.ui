@@ -124,7 +124,9 @@
     <addaction name="separator"/>
     <addaction name="menuSound"/>
     <addaction name="separator"/>
-    <addaction name="actionCPU_Time"/>
+    <addaction name="actionPerformance"/>
+    <addaction name="actionMemory_Map"/>
+    <addaction name="actionChipset"/>
     <addaction name="separator"/>
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
@@ -697,9 +699,19 @@
     <string>Sound &amp;gain…</string>
    </property>
   </action>
-  <action name="actionCPU_Time">
+  <action name="actionPerformance">
    <property name="text">
-    <string>CPU &amp;Time…</string>
+    <string>Per&amp;formance…</string>
+   </property>
+  </action>
+  <action name="actionMemory_Map">
+   <property name="text">
+    <string>Memory &amp;Map…</string>
+   </property>
+  </action>
+  <action name="actionChipset">
+   <property name="text">
+    <string>&amp;Chipset…</string>
    </property>
   </action>
   <action name="actionOpenGL">

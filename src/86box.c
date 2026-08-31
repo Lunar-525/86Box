@@ -397,8 +397,8 @@ uint64_t
 mem_usage_rss_get(void)
 {
 #if defined(__APPLE__)
-    mach_task_basic_info   info;
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t      count = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &count) == KERN_SUCCESS)
         return (uint64_t) info.resident_size;
     return 0;
@@ -430,8 +430,8 @@ uint64_t
 mem_usage_vms_get(void)
 {
 #if defined(__APPLE__)
-    mach_task_basic_info   info;
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t      count = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &count) == KERN_SUCCESS)
         return (uint64_t) info.virtual_size;
     return 0;
@@ -462,13 +462,88 @@ mem_usage_vms_get(void)
 uint64_t
 mem_guest_ram_get(void)
 {
-    return (uint64_t) rammask + 1;
+    /* Actual installed guest RAM (the ram[] allocation), not the CPU
+       address-space mask (rammask+1, which is 4GB on 386DX+). */
+    return mem_ram_size_get();
 }
 
 uint64_t
 mem_guest_rom_get(void)
 {
     return (uint64_t) biosmask + 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chipset (bridge) activity monitoring for the Tools > Chipset viewer.*/
+/* Counters are incremented at the event sites (picinterrupt, DMA       */
+/* transfer, PCI config-space access) only while chipset_mon_enabled is */
+/* set (viewer open). Values are approximate per-refresh deltas.       */
+/* ------------------------------------------------------------------ */
+volatile uint32_t chipset_irq_count[16];
+volatile uint32_t chipset_dma_count[8];
+volatile uint32_t chipset_pci_dev_count[32];
+volatile uint32_t chipset_pci_count;
+int               chipset_mon_enabled = 0;
+
+void
+chipset_mon_set_enabled(int enabled)
+{
+    chipset_mon_enabled = enabled ? 1 : 0;
+    for (int i = 0; i < 16; i++)
+        chipset_irq_count[i] = 0;
+    for (int i = 0; i < 8; i++)
+        chipset_dma_count[i] = 0;
+    for (int i = 0; i < 32; i++)
+        chipset_pci_dev_count[i] = 0;
+    chipset_pci_count = 0;
+}
+
+uint32_t
+chipset_mon_irq_get(int line)
+{
+    return ((line >= 0) && (line < 16)) ? chipset_irq_count[line] : 0;
+}
+
+uint32_t
+chipset_mon_dma_get(int channel)
+{
+    return ((channel >= 0) && (channel < 8)) ? chipset_dma_count[channel] : 0;
+}
+
+uint32_t
+chipset_mon_pci_get(int dev)
+{
+    return ((dev >= 0) && (dev < 32)) ? chipset_pci_dev_count[dev] : 0;
+}
+
+uint32_t
+chipset_mon_pci_total(void)
+{
+    return chipset_pci_count;
+}
+
+void
+chipset_mon_irq_inc(int line)
+{
+    if (chipset_mon_enabled && (line >= 0) && (line < 16))
+        chipset_irq_count[line]++;
+}
+
+void
+chipset_mon_dma_inc(int channel)
+{
+    if (chipset_mon_enabled && (channel >= 0) && (channel < 8))
+        chipset_dma_count[channel]++;
+}
+
+void
+chipset_mon_pci_inc(int dev)
+{
+    if (!chipset_mon_enabled)
+        return;
+    chipset_pci_count++;
+    if ((dev >= 0) && (dev < 32))
+        chipset_pci_dev_count[dev]++;
 }
 
 extern int output;

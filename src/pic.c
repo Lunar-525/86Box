@@ -924,6 +924,15 @@ picinterrupt(void)
 {
     int ret = -1;
 
+    if (chipset_mon_enabled) {
+        int line;
+        if (pic.int_pending && pic_slave_on(&pic, pic.interrupt))
+            line = 8 + (pic2.interrupt & 0x07);
+        else
+            line = pic.interrupt & 0x07;
+        chipset_mon_irq_inc(line);
+    }
+
     if (pic.int_pending) {
         if (pic_slave_on(&pic, pic.interrupt)) {
             if (!pic.slaves[pic.interrupt]->int_pending) {

@@ -180,6 +180,23 @@ extern uint64_t mem_usage_vms_get(void);
 extern uint64_t mem_guest_ram_get(void);
 extern uint64_t mem_guest_rom_get(void);
 
+/* Chipset (bridge) activity monitoring for the Tools > Chipset viewer
+   (86box.c). Counters are incremented at the event sites only while
+   enabled; the viewer reads per-refresh deltas. */
+extern int               chipset_mon_enabled;
+extern volatile uint32_t chipset_irq_count[16];
+extern volatile uint32_t chipset_dma_count[8];
+extern volatile uint32_t chipset_pci_dev_count[32];
+extern volatile uint32_t chipset_pci_count;
+extern void     chipset_mon_set_enabled(int enabled);
+extern uint32_t chipset_mon_irq_get(int line);
+extern uint32_t chipset_mon_dma_get(int channel);
+extern uint32_t chipset_mon_pci_get(int dev);
+extern uint32_t chipset_mon_pci_total(void);
+void chipset_mon_irq_inc(int line);
+void chipset_mon_dma_inc(int channel);
+void chipset_mon_pci_inc(int dev);
+
 #define window_x monitor_settings[0].mon_window_x
 #define window_y monitor_settings[0].mon_window_y
 #define window_w monitor_settings[0].mon_window_w

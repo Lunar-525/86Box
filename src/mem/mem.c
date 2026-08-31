@@ -138,6 +138,159 @@ static uint32_t       remap_start_addr;
 static uint32_t       remap_start_addr2;
 static size_t         ram_size = 0;
 
+/* ------------------------------------------------------------------ */
+/* Memory access tracking for the "Memory Map" viewer.                 */
+/* Gated by mem_access_enabled: when 0 (viewer closed) the per-access  */
+/* branch is skipped, so normal emulation has no measurable overhead.  */
+/* Heat is stored per physical 4KB page (255 = recently accessed).     */
+/*                                                                     */
+/* Heat sources (auto-switch):                                         */
+/*  - paged mode : periodic scan of the guest page tables (PTE         */
+/*                 Accessed/Dirty bits, which the MMU sets). This      */
+/*                 catches accesses from BOTH the interpreter and the  */
+/*                 JIT, with no hot-path hooks.                        */
+/*  - real mode  : per-access write marks placed in the interpreter    */
+/*                 write functions (best effort; JIT-inlined words are */
+/*                 not visible).                                       */
+/* ------------------------------------------------------------------ */
+uint8_t  mem_access_enabled = 0;
+uint8_t *mem_access_heat     = NULL;
+uint32_t mem_access_pages    = 0;
+static size_t mem_access_ram_size = 0;
+
+void
+mem_access_reset(void)
+{
+    const size_t need = (ram_size + 15) & ~15;
+    if ((need != mem_access_ram_size) || (mem_access_heat == NULL)) {
+        free(mem_access_heat);
+        mem_access_heat = (uint8_t *) calloc((need >> 12) ? (need >> 12) : 1, 1);
+        mem_access_pages = (uint32_t) (need >> 12);
+        mem_access_ram_size = need;
+    } else
+        memset(mem_access_heat, 0, mem_access_pages);
+}
+
+void
+mem_access_set_enabled(int enabled)
+{
+    mem_access_enabled = enabled ? 1 : 0;
+    if (mem_access_enabled)
+        mem_access_reset();
+}
+
+void
+mem_access_clear_heat(void)
+{
+    if (mem_access_heat)
+        memset(mem_access_heat, 0, mem_access_pages);
+}
+
+uint8_t *
+mem_access_heat_get(void)
+{
+    return mem_access_heat;
+}
+
+uint32_t
+mem_access_pages_get(void)
+{
+    return mem_access_pages;
+}
+
+int
+mem_access_paging_enabled(void)
+{
+    return (cr0 >> 31) ? 1 : 0;
+}
+
+/* Actual installed guest RAM in bytes (the allocated ram[] size), not the
+   CPU address-space mask. */
+uint64_t
+mem_ram_size_get(void)
+{
+    return (uint64_t) ram_size;
+}
+
+void
+mem_access_mark_write(uint32_t phys_addr)
+{
+    if ((mem_access_heat != NULL) && (phys_addr >> 12) < mem_access_pages)
+        mem_access_heat[phys_addr >> 12] = 255;
+}
+
+/* Re-size the heat array if the machine's RAM configuration changed while the
+   viewer was open (e.g. a hard reset with a different memory size). */
+void
+mem_access_ensure_sized(void)
+{
+    if ((mem_access_heat != NULL) && (ram_size != mem_access_ram_size))
+        mem_access_reset();
+}
+
+/* Read a 32-bit word from guest physical memory, bounded by the actual RAM
+   allocation. NOTE: rammask is the CPU *address-space* mask (e.g. 0xffffffff
+   on a 386DX), NOT the RAM allocation size, so it must never be used to
+   index into ram[] - out-of-range page-table bases (e.g. a transitional CR3
+   while entering protected mode) would read past the allocation and crash. */
+static uint32_t
+mem_access_read32(uint32_t phys)
+{
+    if (ram && ((size_t) phys + 3) < (size_t) ram_size)
+        return *(const uint32_t *) &ram[phys];
+    return 0;
+}
+
+/* Scan the guest page tables and feed heat from PTE Present/Accessed/Dirty
+   bits. Only meaningful while paging is enabled; catches interpreter + JIT
+   accesses (the MMU sets these bits during translation). */
+void
+mem_access_scan_ptes(void)
+{
+    if (!mem_access_heat || !ram || !(cr0 >> 31))
+        return;
+
+    if (cr4 & CR4_PAE) {
+        /* 3-level PAE: PDPTE (4 entries, 1G each) -> PDE (512) -> PTE (512). */
+        const uint32_t pdpte_base = cr3 & ~0x1f;
+        for (uint32_t pdp = 0; pdp < 4; pdp++) {
+            const uint32_t pdpte = mem_access_read32(pdpte_base + pdp * 8);
+            if (!(pdpte & 1))
+                continue;
+            const uint32_t pde_base = pdpte & 0xfffff000;
+            for (uint32_t dir = 0; dir < 512; dir++) {
+                const uint32_t pde = mem_access_read32(pde_base + dir * 8);
+                if (!(pde & 1))
+                    continue;
+                const uint32_t pte_base = pde & 0xfffff000;
+                for (uint32_t tbl = 0; tbl < 512; tbl++) {
+                    const uint32_t pte = mem_access_read32(pte_base + tbl * 8);
+                    if ((pte & 1) && (pte & 0x20)) {
+                        const uint32_t frame = pte & 0xfffff000;
+                        mem_access_mark_write(frame);
+                    }
+                }
+            }
+        }
+    } else {
+        /* 2-level 32-bit paging: PDE (1024) -> PTE (1024). */
+        const uint32_t pde_base = cr3 & ~0xfff;
+        for (uint32_t dir = 0; dir < 1024; dir++) {
+            const uint32_t pde = mem_access_read32(pde_base + dir * 4);
+            if (!(pde & 1))
+                continue;
+            const uint32_t pte_base = pde & ~0xfff;
+            for (uint32_t tbl = 0; tbl < 1024; tbl++) {
+                const uint32_t pte = mem_access_read32(pte_base + tbl * 4);
+                if ((pte & 1) && (pte & 0x20)) {
+                    const uint32_t frame = pte & 0xfffff000;
+                    mem_access_mark_write(frame);
+                }
+            }
+        }
+    }
+}
+
 #ifdef ENABLE_MEM_LOG
 int mem_do_log = ENABLE_MEM_LOG;
 
@@ -834,6 +987,9 @@ writemembl(uint32_t addr, uint8_t val)
     }
     addr = (uint32_t) (addr64 & rammask);
 
+    if (mem_access_enabled)
+        mem_access_mark_write(addr);
+
     map = write_mapping[addr >> MEM_GRANULARITY_BITS];
     if (map && map->write_b)
         map->write_b(addr, val, map->priv);
@@ -997,6 +1153,8 @@ writememwl(uint32_t addr, uint16_t val)
             writemembl_no_mmut(addr + 1, addr64a[1], val >> 8);
             return;
         } else if (writelookup2[addr >> 12] != (uintptr_t) LOOKUP_INV) {
+            if (mem_access_enabled)
+                mem_access_mark_write(addr);
             *(uint16_t *) (writelookup2[addr >> 12] + addr) = val;
             return;
         }
@@ -1101,6 +1259,8 @@ writememwl_no_mmut(uint32_t addr, uint32_t *a64, uint16_t val)
             writemembl_no_mmut(addr + 1, a64[1], val >> 8);
             return;
         } else if (writelookup2[addr >> 12] != (uintptr_t) LOOKUP_INV) {
+            if (mem_access_enabled)
+                mem_access_mark_write(addr);
             *(uint16_t *) (writelookup2[addr >> 12] + addr) = val;
             return;
         }
@@ -1267,6 +1427,8 @@ writememll(uint32_t addr, uint32_t val)
             writememwl_no_mmut(addr + 2, &(addr64a[2]), val >> 16);
             return;
         } else if (writelookup2[addr >> 12] != (uintptr_t) LOOKUP_INV) {
+            if (mem_access_enabled)
+                mem_access_mark_write(addr);
             *(uint32_t *) (writelookup2[addr >> 12] + addr) = val;
             return;
         }
@@ -1379,6 +1541,8 @@ writememll_no_mmut(uint32_t addr, uint32_t *a64, uint32_t val)
             writememwl_no_mmut(addr + 2, &(a64[2]), val >> 16);
             return;
         } else if (writelookup2[addr >> 12] != (uintptr_t) LOOKUP_INV) {
+            if (mem_access_enabled)
+                mem_access_mark_write(addr);
             *(uint32_t *) (writelookup2[addr >> 12] + addr) = val;
             return;
         }
@@ -1560,6 +1724,8 @@ writememql(uint32_t addr, uint64_t val)
             writememll_no_mmut(addr + 4, &(addr64a[4]), val >> 32);
             return;
         } else if (writelookup2[addr >> 12] != (uintptr_t) LOOKUP_INV) {
+            if (mem_access_enabled)
+                mem_access_mark_write(addr);
             *(uint64_t *) (writelookup2[addr >> 12] + addr) = val;
             return;
         }

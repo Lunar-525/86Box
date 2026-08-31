@@ -25,7 +25,9 @@
 
 #include "qt_specifydimensions.h"
 #include "qt_soundgain.hpp"
-#include "qt_cputime.hpp"
+#include "qt_performance.hpp"
+#include "qt_memorymap.hpp"
+#include "qt_chipset.hpp"
 #include "qt_preferences.hpp"
 #include "qt_mcadevicelist.hpp"
 
@@ -2455,16 +2457,42 @@ MainWindow::on_actionSound_gain_triggered()
 }
 
 void
-MainWindow::on_actionCPU_Time_triggered()
+MainWindow::on_actionPerformance_triggered()
 {
-    if (!cpuTimeDlg) {
-        cpuTimeDlg = new CPUTime(this);
-        cpuTimeDlg->setAttribute(Qt::WA_DeleteOnClose);
-        connect(cpuTimeDlg, &QObject::destroyed, this, [this] { cpuTimeDlg = nullptr; });
+    if (!perfDlg) {
+        perfDlg = new Performance(this);
+        perfDlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(perfDlg, &QObject::destroyed, this, [this] { perfDlg = nullptr; });
     }
-    cpuTimeDlg->show();
-    cpuTimeDlg->raise();
-    cpuTimeDlg->activateWindow();
+    perfDlg->show();
+    perfDlg->raise();
+    perfDlg->activateWindow();
+}
+
+void
+MainWindow::on_actionMemory_Map_triggered()
+{
+    if (!memMapDlg) {
+        memMapDlg = new MemoryMap(this);
+        memMapDlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(memMapDlg, &QObject::destroyed, this, [this] { memMapDlg = nullptr; });
+    }
+    memMapDlg->show();
+    memMapDlg->raise();
+    memMapDlg->activateWindow();
+}
+
+void
+MainWindow::on_actionChipset_triggered()
+{
+    if (!chipsetDlg) {
+        chipsetDlg = new Chipset(this);
+        chipsetDlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(chipsetDlg, &QObject::destroyed, this, [this] { chipsetDlg = nullptr; });
+    }
+    chipsetDlg->show();
+    chipsetDlg->raise();
+    chipsetDlg->activateWindow();
 }
 
 void

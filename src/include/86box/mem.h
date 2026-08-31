@@ -256,6 +256,23 @@ typedef struct _page_ {
 extern uint8_t *ram;
 extern uint32_t rammask;
 
+/* Memory access tracking for the "Memory Map" viewer (mem.c).
+   Gated by mem_access_enabled: when 0 there is no per-access overhead.
+   Heat is per physical 4KB page, 0..255. */
+extern uint8_t  mem_access_enabled;
+extern uint8_t *mem_access_heat;
+extern uint32_t mem_access_pages;
+extern void     mem_access_set_enabled(int enabled);
+extern void     mem_access_reset(void);
+extern void     mem_access_clear_heat(void);
+extern uint8_t *mem_access_heat_get(void);
+extern uint32_t mem_access_pages_get(void);
+extern int      mem_access_paging_enabled(void);
+extern void     mem_access_ensure_sized(void);
+extern uint64_t mem_ram_size_get(void);
+extern void     mem_access_mark_write(uint32_t phys_addr);
+extern void     mem_access_scan_ptes(void);
+
 extern uint8_t *rom;
 extern uint32_t biosmask;
 extern uint32_t biosaddr;

@@ -228,9 +228,15 @@ add_library(ui STATIC
     qt_soundgain.hpp
     qt_soundgain.cpp
     qt_soundgain.ui
-    qt_cputime.hpp
-    qt_cputime.cpp
-    qt_cputime.ui
+    qt_performance.hpp
+    qt_performance.cpp
+    qt_performance.ui
+    qt_memorymap.hpp
+    qt_memorymap.cpp
+    qt_memorymap.ui
+    qt_chipset.hpp
+    qt_chipset.cpp
+    qt_chipset.ui
 
     qt_styleoverride.cpp
     qt_styleoverride.hpp

@@ -19,7 +19,9 @@ extern QTimer discordupdate;
 
 class MediaMenu;
 class RendererStack;
-class CPUTime;
+class Performance;
+class MemoryMap;
+class Chipset;
 
 namespace Ui {
 class MainWindow;
@@ -133,7 +135,9 @@ private slots:
     void toggleFullscreenUI();
     void on_actionMute_Unmute_triggered();
     void on_actionSound_gain_triggered();
-    void on_actionCPU_Time_triggered();
+    void on_actionPerformance_triggered();
+    void on_actionMemory_Map_triggered();
+    void on_actionChipset_triggered();
     void on_actionPreferences_triggered();
     void on_actionEnable_Discord_integration_triggered(bool checked);
     void on_actionRenderer_options_triggered();
@@ -205,8 +209,14 @@ private:
     /* Mouse capture state before showing fullscreen UI */
     bool mouse_was_captured = false;
 
-    /* Tools > CPU Time indicator dialog (single non-modal instance). */
-    CPUTime *cpuTimeDlg = nullptr;
+    /* Tools > Performance indicator dialog (single non-modal instance). */
+    Performance *perfDlg = nullptr;
+
+    /* Tools > Memory Map viewer (single non-modal instance). */
+    MemoryMap *memMapDlg = nullptr;
+
+    /* Tools > Chipset (bridge) activity viewer (single non-modal instance). */
+    Chipset *chipsetDlg = nullptr;
 
     friend class SpecifyDimensions;
     friend class Preferences;
