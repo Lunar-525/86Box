@@ -31,6 +31,14 @@
 #include <wchar.h>
 #include <unistd.h>
 #include <math.h>
+#include <stdatomic.h>
+#ifdef _WIN32
+#    include <windows.h>
+#    include <psapi.h>
+#endif
+#ifdef __APPLE__
+#    include <mach/mach.h>
+#endif
 
 #ifndef _WIN32
 #    include <pwd.h>
@@ -337,6 +345,131 @@ extern int mmuflush;
 int fps;
 int framecount;
 static uint32_t fps_sample_elapsed_ms = 1000;
+
+/* Precise CPU-time accounting for the Tools > "CPU Time" indicator.
+   Measured around cpu_exec() (pure CPU execution only) in pc_run(), in
+   nanoseconds. Written atomically by the emulation thread, read by the UI
+   thread; reset from the UI via cpu_time_reset(). */
+_Atomic uint64_t cpu_time_guest_ns;
+_Atomic uint64_t cpu_time_real_ns;
+
+static uint64_t
+cpu_time_now_ns(void)
+{
+#ifdef _WIN32
+    static LARGE_INTEGER cpu_time_freq;
+    LARGE_INTEGER       cpu_time_cnt;
+    if (cpu_time_freq.QuadPart == 0)
+        QueryPerformanceFrequency(&cpu_time_freq);
+    QueryPerformanceCounter(&cpu_time_cnt);
+    return (uint64_t) ((double) cpu_time_cnt.QuadPart * 1000000000.0 / (double) cpu_time_freq.QuadPart);
+#else
+    struct timespec cpu_time_ts;
+    clock_gettime(CLOCK_MONOTONIC, &cpu_time_ts);
+    return (uint64_t) cpu_time_ts.tv_sec * 1000000000ULL + (uint64_t) cpu_time_ts.tv_nsec;
+#endif
+}
+
+uint64_t
+cpu_time_guest_ns_get(void)
+{
+    return atomic_load_explicit(&cpu_time_guest_ns, memory_order_relaxed);
+}
+
+uint64_t
+cpu_time_real_ns_get(void)
+{
+    return atomic_load_explicit(&cpu_time_real_ns, memory_order_relaxed);
+}
+
+void
+cpu_time_reset(void)
+{
+    atomic_store_explicit(&cpu_time_guest_ns, 0, memory_order_relaxed);
+    atomic_store_explicit(&cpu_time_real_ns, 0, memory_order_relaxed);
+}
+
+/* Memory usage for the Tools > "Memory Usage" indicator.
+   Host side: sampled live from the OS at call time (no accumulators needed).
+   Guest side: the emulated machine's RAM/ROM sizing. */
+
+uint64_t
+mem_usage_rss_get(void)
+{
+#if defined(__APPLE__)
+    mach_task_basic_info   info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &count) == KERN_SUCCESS)
+        return (uint64_t) info.resident_size;
+    return 0;
+#elif defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return (uint64_t) pmc.WorkingSetSize;
+    return 0;
+#elif defined(__linux__)
+    FILE *f = fopen("/proc/self/status", "r");
+    char  line[256];
+    if (!f)
+        return 0;
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long kb;
+        if (sscanf(line, "VmRSS: %llu kB", &kb) == 1) {
+            fclose(f);
+            return (uint64_t) kb * 1024ULL;
+        }
+    }
+    fclose(f);
+    return 0;
+#else
+    return 0;
+#endif
+}
+
+uint64_t
+mem_usage_vms_get(void)
+{
+#if defined(__APPLE__)
+    mach_task_basic_info   info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &count) == KERN_SUCCESS)
+        return (uint64_t) info.virtual_size;
+    return 0;
+#elif defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return (uint64_t) pmc.PagefileUsage;
+    return 0;
+#elif defined(__linux__)
+    FILE *f = fopen("/proc/self/status", "r");
+    char  line[256];
+    if (!f)
+        return 0;
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long kb;
+        if (sscanf(line, "VmSize: %llu kB", &kb) == 1) {
+            fclose(f);
+            return (uint64_t) kb * 1024ULL;
+        }
+    }
+    fclose(f);
+    return 0;
+#else
+    return 0;
+#endif
+}
+
+uint64_t
+mem_guest_ram_get(void)
+{
+    return (uint64_t) rammask + 1;
+}
+
+uint64_t
+mem_guest_rom_get(void)
+{
+    return (uint64_t) biosmask + 1;
+}
 
 extern int output;
 int        atfullspeed;
@@ -2014,7 +2147,25 @@ pc_run(void)
 
     /* Run a block of code. */
     startblit();
-    cpu_exec((int32_t) cpu_s->rspeed / (force_10ms ? 100 : 1000));
+    {
+        const uint64_t cpu_time_t0 = cpu_time_now_ns();
+        const uint64_t cpu_tsc0    = tsc;
+        cpu_exec((int32_t) cpu_s->rspeed / (force_10ms ? 100 : 1000));
+        const uint64_t cpu_tsc1    = tsc;
+        const uint64_t cpu_time_t1 = cpu_time_now_ns();
+
+        /* Precise CPU-time accounting for the Tools > "CPU Time" indicator:
+           pure CPU execution only (cpu_exec), in ns. The guest time is derived
+           from the actual TSC delta so early exits (reset, gdbstub, ...) do not
+           distort the reading. */
+        if ((cpu_s != NULL) && (cpu_s->rspeed != 0)) {
+            const uint64_t guest_cycles = (cpu_tsc1 >= cpu_tsc0) ? (cpu_tsc1 - cpu_tsc0) : 0;
+            const uint64_t guest_ns     = (uint64_t) ((double) guest_cycles * 1000000000.0 / (double) cpu_s->rspeed);
+            const uint64_t real_ns      = cpu_time_t1 - cpu_time_t0;
+            atomic_fetch_add_explicit(&cpu_time_guest_ns, guest_ns, memory_order_relaxed);
+            atomic_fetch_add_explicit(&cpu_time_real_ns, real_ns, memory_order_relaxed);
+        }
+    }
     ack_pause();
 #ifdef USE_GDBSTUB /* avoid a KBC FIFO overflow when CPU emulation is stalled */
     if (gdbstub_step == GDBSTUB_EXEC) {

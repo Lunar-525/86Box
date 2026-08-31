@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MemUsage</class>
+ <widget class="QDialog" name="MemUsage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>380</width>
+    <height>210</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Memory Usage</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="hostGroup">
+     <property name="title">
+      <string>86Box process (host)</string>
+     </property>
+     <layout class="QFormLayout" name="hostForm">
+      <item row="0" column="0">
+       <widget class="QLabel" name="rssLabel">
+        <property name="text">
+         <string>Resident memory</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="rssValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="vmsLabel">
+        <property name="text">
+         <string>Virtual memory</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="vmsValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="guestGroup">
+     <property name="title">
+      <string>Emulated machine</string>
+     </property>
+     <layout class="QFormLayout" name="guestForm">
+      <item row="0" column="0">
+       <widget class="QLabel" name="ramLabel">
+        <property name="text">
+         <string>Guest RAM</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="ramValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="romLabel">
+        <property name="text">
+         <string>BIOS ROM</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="romValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="noteLabel">
+     <property name="text">
+      <string>Host process memory is sampled live; guest sizes reflect the current machine configuration.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="standardButtons">
+        <set>QDialogButtonBox::Close</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>MemUsage</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>330</x>
+     <y>190</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>190</x>
+     <y>105</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

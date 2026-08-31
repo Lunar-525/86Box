@@ -165,6 +165,21 @@ extern uint8_t  instru_enabled;
 extern uint64_t instru_run_ms;
 #endif
 
+/* Precise CPU-time accounting for the Tools > "CPU Time" indicator (86box.c).
+   Returns the accumulated pure CPU execution time in nanoseconds, or resets
+   both accumulators to zero. */
+extern uint64_t cpu_time_guest_ns_get(void);
+extern uint64_t cpu_time_real_ns_get(void);
+extern void     cpu_time_reset(void);
+
+/* Memory usage for the Tools > "Memory Usage" indicator (86box.c).
+   Host side: resident set size / virtual memory size of this process in
+   bytes, sampled live. Guest side: emulated machine RAM / BIOS ROM sizing. */
+extern uint64_t mem_usage_rss_get(void);
+extern uint64_t mem_usage_vms_get(void);
+extern uint64_t mem_guest_ram_get(void);
+extern uint64_t mem_guest_rom_get(void);
+
 #define window_x monitor_settings[0].mon_window_x
 #define window_y monitor_settings[0].mon_window_y
 #define window_w monitor_settings[0].mon_window_w

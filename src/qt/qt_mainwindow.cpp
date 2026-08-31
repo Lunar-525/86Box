@@ -25,6 +25,7 @@
 
 #include "qt_specifydimensions.h"
 #include "qt_soundgain.hpp"
+#include "qt_cputime.hpp"
 #include "qt_preferences.hpp"
 #include "qt_mcadevicelist.hpp"
 
@@ -2451,6 +2452,19 @@ MainWindow::on_actionSound_gain_triggered()
 {
     SoundGain gain(this);
     gain.exec();
+}
+
+void
+MainWindow::on_actionCPU_Time_triggered()
+{
+    if (!cpuTimeDlg) {
+        cpuTimeDlg = new CPUTime(this);
+        cpuTimeDlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(cpuTimeDlg, &QObject::destroyed, this, [this] { cpuTimeDlg = nullptr; });
+    }
+    cpuTimeDlg->show();
+    cpuTimeDlg->raise();
+    cpuTimeDlg->activateWindow();
 }
 
 void

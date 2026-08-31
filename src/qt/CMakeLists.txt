@@ -228,6 +228,9 @@ add_library(ui STATIC
     qt_soundgain.hpp
     qt_soundgain.cpp
     qt_soundgain.ui
+    qt_cputime.hpp
+    qt_cputime.cpp
+    qt_cputime.ui
 
     qt_styleoverride.cpp
     qt_styleoverride.hpp

@@ -19,6 +19,7 @@ extern QTimer discordupdate;
 
 class MediaMenu;
 class RendererStack;
+class CPUTime;
 
 namespace Ui {
 class MainWindow;
@@ -132,6 +133,7 @@ private slots:
     void toggleFullscreenUI();
     void on_actionMute_Unmute_triggered();
     void on_actionSound_gain_triggered();
+    void on_actionCPU_Time_triggered();
     void on_actionPreferences_triggered();
     void on_actionEnable_Discord_integration_triggered(bool checked);
     void on_actionRenderer_options_triggered();
@@ -202,6 +204,9 @@ private:
 
     /* Mouse capture state before showing fullscreen UI */
     bool mouse_was_captured = false;
+
+    /* Tools > CPU Time indicator dialog (single non-modal instance). */
+    CPUTime *cpuTimeDlg = nullptr;
 
     friend class SpecifyDimensions;
     friend class Preferences;

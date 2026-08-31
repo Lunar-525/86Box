@@ -124,6 +124,8 @@
     <addaction name="separator"/>
     <addaction name="menuSound"/>
     <addaction name="separator"/>
+    <addaction name="actionCPU_Time"/>
+    <addaction name="separator"/>
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
     <addaction name="actionBegin_trace"/>
@@ -693,6 +695,11 @@
   <action name="actionSound_gain">
    <property name="text">
     <string>Sound &amp;gain…</string>
+   </property>
+  </action>
+  <action name="actionCPU_Time">
+   <property name="text">
+    <string>CPU &amp;Time…</string>
    </property>
   </action>
   <action name="actionOpenGL">
