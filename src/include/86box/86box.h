@@ -197,6 +197,18 @@ void chipset_mon_irq_inc(int line);
 void chipset_mon_dma_inc(int channel);
 void chipset_mon_pci_inc(int dev);
 
+/* Approximate branch predictor simulator (cpu.c), gated by the Branch
+   Prediction viewer. Fed by the conditional-jump marks in x86_ops_jump.h. */
+extern int       branch_sim_enabled;
+extern void      branch_sim_feed(uint32_t branch_pc, int taken);
+extern void      branch_sim_set_enabled(int enabled);
+extern int       branch_sim_entries_get(void);
+extern uint64_t  branch_sim_total_get(void);
+extern uint64_t  branch_sim_taken_get(void);
+extern uint64_t  branch_sim_correct_get(void);
+extern uint64_t  branch_sim_incorrect_get(void);
+extern void      branch_sim_map_get(uint8_t *out);
+
 #define window_x monitor_settings[0].mon_window_x
 #define window_y monitor_settings[0].mon_window_y
 #define window_w monitor_settings[0].mon_window_w

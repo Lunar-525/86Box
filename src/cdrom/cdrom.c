@@ -3391,7 +3391,11 @@ cdrom_load(cdrom_t *dev, const char *fn, const int skip_insert)
         dev->local = aaru_image_open(dev, dev->image_path);
     else {
         dev->local = image_open(dev, dev->image_path);
-        if (!dev->local)
+        /* Only fall back to the Aaru handler when the Aaru library is
+           actually available: otherwise a non-Aaru image that fails to open
+           would report a misleading "libaaruformat is missing" error
+           instead of the real reason. */
+        if (!dev->local && aaru_support_available())
             dev->local = aaru_image_open(dev, dev->image_path);
     }
 

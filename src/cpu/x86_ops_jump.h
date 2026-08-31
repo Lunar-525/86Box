@@ -21,6 +21,8 @@
         int8_t offset = (int8_t) getbytef();                            \
         CLOCK_CYCLES(timing_bnt);                                       \
         if (cond_##condition) {                                         \
+            if (branch_sim_enabled)                                     \
+                branch_sim_feed(cpu_state.oldpc, 1);                    \
             cpu_state.pc += offset;                                     \
             if (!(cpu_state.op32 & 0x100))                              \
                 cpu_state.pc &= 0xffff;                                 \
@@ -31,6 +33,8 @@
             return 1;                                                   \
         }                                                               \
         PREFETCH_RUN(timing_bnt, 2, -1, 0, 0, 0, 0, 0);                 \
+        if (branch_sim_enabled)                                         \
+            branch_sim_feed(cpu_state.oldpc, 0);                        \
         return 0;                                                       \
     }                                                                   \
                                                                         \
@@ -39,6 +43,8 @@
         int16_t offset = (int16_t) getwordf();                          \
         CLOCK_CYCLES(timing_bnt);                                       \
         if (cond_##condition) {                                         \
+            if (branch_sim_enabled)                                     \
+                branch_sim_feed(cpu_state.oldpc, 1);                    \
             cpu_state.pc += offset;                                     \
             cpu_state.pc &= 0xffff;                                     \
             CLOCK_CYCLES_ALWAYS(timing_bt);                             \
@@ -48,6 +54,8 @@
             return 1;                                                   \
         }                                                               \
         PREFETCH_RUN(timing_bnt, 3, -1, 0, 0, 0, 0, 0);                 \
+        if (branch_sim_enabled)                                         \
+            branch_sim_feed(cpu_state.oldpc, 0);                        \
         return 0;                                                       \
     }                                                                   \
                                                                         \
@@ -58,6 +66,8 @@
             return 1;                                                   \
         CLOCK_CYCLES(timing_bnt);                                       \
         if (cond_##condition) {                                         \
+            if (branch_sim_enabled)                                     \
+                branch_sim_feed(cpu_state.oldpc, 1);                    \
             cpu_state.pc += offset;                                     \
             CLOCK_CYCLES_ALWAYS(timing_bt);                             \
             CPU_BLOCK_END();                                            \
@@ -66,6 +76,8 @@
             return 1;                                                   \
         }                                                               \
         PREFETCH_RUN(timing_bnt, 5, -1, 0, 0, 0, 0, 0);                 \
+        if (branch_sim_enabled)                                         \
+            branch_sim_feed(cpu_state.oldpc, 0);                        \
         return 0;                                                       \
     }
 

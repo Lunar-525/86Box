@@ -4566,3 +4566,108 @@ cpu_update_waitstates(void)
             cpu_rom_prefetch_cycles = cpu_mem_prefetch_cycles;
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* Approximate branch predictor simulator.                             */
+/* A 2-bit saturating-counter BHT (branch history table) fed by the    */
+/* gated conditional-jump marks placed in the interpreter Jcc macros   */
+/* (x86_ops_jump.h). JIT-inlined branches are not all visible, so the  */
+/* accuracy is approximate. Gated by branch_sim_enabled (viewer open). */
+/* ------------------------------------------------------------------ */
+#define BRANCH_SIM_ENTRIES 2048
+
+int       branch_sim_enabled = 0;
+static uint8_t  branch_bht[BRANCH_SIM_ENTRIES]; /* 2-bit saturating counters */
+static uint64_t branch_total = 0;
+static uint64_t branch_taken = 0;
+static uint64_t branch_correct = 0;
+static uint64_t branch_incorrect = 0;
+
+static uint32_t
+branch_sim_hash(uint32_t pc)
+{
+    pc ^= pc >> 8;
+    pc ^= pc >> 4;
+    pc ^= pc >> 2;
+    return pc & (BRANCH_SIM_ENTRIES - 1);
+}
+
+void
+branch_sim_feed(uint32_t branch_pc, int taken)
+{
+    if (!branch_sim_enabled)
+        return;
+
+    const uint32_t idx = branch_sim_hash(branch_pc);
+    const uint8_t  c   = branch_bht[idx];
+
+    /* Predict taken when the 2-bit counter is 10 or 11. */
+    if ((c >= 2) == (taken != 0))
+        branch_correct++;
+    else
+        branch_incorrect++;
+
+    branch_total++;
+    if (taken)
+        branch_taken++;
+
+    /* Saturating update. */
+    if (taken) {
+        if (c < 3)
+            branch_bht[idx] = (uint8_t) (c + 1);
+    } else if (c > 0)
+        branch_bht[idx] = (uint8_t) (c - 1);
+}
+
+void
+branch_sim_set_enabled(int enabled)
+{
+    branch_sim_enabled = enabled ? 1 : 0;
+    if (branch_sim_enabled) {
+        memset(branch_bht, 0, sizeof(branch_bht));
+        branch_total = branch_taken = branch_correct = branch_incorrect = 0;
+    }
+}
+
+int
+branch_sim_active(void)
+{
+    return 1;
+}
+
+int
+branch_sim_entries_get(void)
+{
+    return BRANCH_SIM_ENTRIES;
+}
+
+uint64_t
+branch_sim_total_get(void)
+{
+    return branch_total;
+}
+
+uint64_t
+branch_sim_taken_get(void)
+{
+    return branch_taken;
+}
+
+uint64_t
+branch_sim_correct_get(void)
+{
+    return branch_correct;
+}
+
+uint64_t
+branch_sim_incorrect_get(void)
+{
+    return branch_incorrect;
+}
+
+void
+branch_sim_map_get(uint8_t *out)
+{
+    if (out)
+        memcpy(out, branch_bht, BRANCH_SIM_ENTRIES);
+}

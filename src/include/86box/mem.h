@@ -270,6 +270,28 @@ extern uint32_t mem_access_pages_get(void);
 extern int      mem_access_paging_enabled(void);
 extern void     mem_access_ensure_sized(void);
 extern uint64_t mem_ram_size_get(void);
+
+/* Approximate guest L1 cache simulator (mem.c), fed by the gated memory
+   access marks. Gated by cache_sim_set_enabled (viewer open). */
+extern void     cache_sim_set_enabled(int enabled);
+extern void     cache_sim_reset(void);
+extern void     cache_sim_feed(uint32_t phys_addr);
+extern int      cache_sim_active(void);
+extern int      cache_sim_sets_get(void);
+extern int      cache_sim_assoc_get(void);
+extern int      cache_sim_line_get(void);
+extern int      cache_sim_size_get(void);
+extern uint64_t cache_sim_hits_get(void);
+extern uint64_t cache_sim_misses_get(void);
+extern void     cache_sim_map_get(uint8_t *out);
+
+/* Bus activity bitmap for the "Bus Waterfall" viewer (mem.c), gated. */
+extern int      bus_act_enabled;
+extern void     bus_act_set_enabled(int enabled);
+extern void     bus_act_ensure_sized(void);
+extern void     bus_act_clear(void);
+extern uint8_t *bus_act_get(void);
+extern uint32_t bus_act_pages_get(void);
 extern void     mem_access_mark_write(uint32_t phys_addr);
 extern void     mem_access_scan_ptes(void);
 

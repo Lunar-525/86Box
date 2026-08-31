@@ -212,11 +212,51 @@ mem_ram_size_get(void)
     return (uint64_t) ram_size;
 }
 
+/* Approximate guest L1 cache simulator (full implementation below).
+   Gated by cache_sim.enabled; fed from the gated memory-access marks. */
+typedef struct {
+    int      enabled;
+    int      size;      /* bytes */
+    int      assoc;     /* ways */
+    int      line;      /* line size, bytes */
+    int      sets;      /* size / assoc / line */
+    uint32_t line_bits; /* log2(line) */
+    uint32_t idx_bits;  /* log2(sets) */
+    uint32_t *tag;
+    uint8_t  *valid;
+    uint32_t *lastuse;  /* recency clock per line */
+    uint64_t  clock;
+    uint64_t  hits;
+    uint64_t  misses;
+} cache_sim_t;
+
+static cache_sim_t cache_sim;
+
+/* Bus activity bitmap for the "Bus Waterfall" viewer (full implementation
+   below); set from the gated access marks. */
+uint8_t  *bus_act         = NULL;
+uint32_t  bus_act_pages   = 0;
+int       bus_act_enabled = 0;
+
 void
 mem_access_mark_write(uint32_t phys_addr)
 {
-    if ((mem_access_heat != NULL) && (phys_addr >> 12) < mem_access_pages)
-        mem_access_heat[phys_addr >> 12] = 255;
+    /* Heat model: every access bumps the page's heat by a visible amount,
+       capped at 255. The viewer decays the heat every refresh, so a fresh
+       access lights up green, sustained access escalates through yellow to
+       red, and idleness fades it back to fully transparent. */
+    if ((mem_access_heat != NULL) && ((phys_addr >> 12) < mem_access_pages)) {
+        const uint32_t page = phys_addr >> 12;
+        const int      h    = (int) mem_access_heat[page] + 48;
+        mem_access_heat[page] = (h >= 255) ? 255 : (uint8_t) h;
+    }
+    if (bus_act_enabled && bus_act) {
+        const uint32_t page = phys_addr >> 12;
+        if (page < bus_act_pages)
+            bus_act[page] = 1;
+    }
+    if (cache_sim.enabled)
+        cache_sim_feed(phys_addr);
 }
 
 /* Re-size the heat array if the machine's RAM configuration changed while the
@@ -289,6 +329,221 @@ mem_access_scan_ptes(void)
             }
         }
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Approximate guest L1 cache simulator implementation.                */
+/* ------------------------------------------------------------------ */
+void
+cache_sim_reset(void)
+{
+    int size = 0, assoc = 0, line = 32;
+
+    /* Geometry per emulated CPU class (approximate; from typical CPUID). */
+    if (is486)
+        size = 8192, assoc = 4;          /* 486-class L1 */
+    else if (is_p6)
+        size = 16384, assoc = 4;         /* Pentium Pro/II L1 */
+    else if (is_k6)
+        size = 32768, assoc = 2;         /* K6 L1 */
+    else if (is586)
+        size = 8192, assoc = 2;          /* Pentium/K5 D-cache */
+
+    free(cache_sim.tag);
+    free(cache_sim.valid);
+    free(cache_sim.lastuse);
+    cache_sim.tag     = NULL;
+    cache_sim.valid   = NULL;
+    cache_sim.lastuse = NULL;
+
+    cache_sim.size = size;
+    cache_sim.assoc = assoc;
+    cache_sim.line = line;
+    cache_sim.sets = (size && assoc && line) ? (size / assoc / line) : 0;
+    cache_sim.line_bits = 0;
+    while ((1u << cache_sim.line_bits) < (uint32_t) line)
+        cache_sim.line_bits++;
+    cache_sim.idx_bits = 0;
+    while ((1u << cache_sim.idx_bits) < (uint32_t) cache_sim.sets)
+        cache_sim.idx_bits++;
+    cache_sim.clock = 0;
+    cache_sim.hits = cache_sim.misses = 0;
+
+    if (cache_sim.sets) {
+        const int n = cache_sim.sets * assoc;
+        cache_sim.tag     = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
+        cache_sim.valid   = (uint8_t *) calloc((size_t) n, 1);
+        cache_sim.lastuse = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
+    }
+}
+
+void
+cache_sim_set_enabled(int enabled)
+{
+    cache_sim.enabled = enabled ? 1 : 0;
+    if (cache_sim.enabled)
+        cache_sim_reset();
+}
+
+void
+cache_sim_feed(uint32_t phys)
+{
+    if (!cache_sim.enabled || !cache_sim.sets)
+        return;
+
+    const uint32_t idx = (phys >> cache_sim.line_bits) & ((1u << cache_sim.idx_bits) - 1);
+    const uint32_t tag = phys >> (cache_sim.line_bits + cache_sim.idx_bits);
+    const int base     = (int) idx * cache_sim.assoc;
+    int way, victim = -1;
+
+    cache_sim.clock++;
+
+    for (way = 0; way < cache_sim.assoc; way++) {
+        const int i = base + way;
+        if (cache_sim.valid[i] && (cache_sim.tag[i] == tag)) {
+            cache_sim.lastuse[i] = cache_sim.clock;
+            cache_sim.hits++;
+            return;
+        }
+        if (!cache_sim.valid[i] && (victim == -1))
+            victim = way;
+    }
+
+    /* Miss: evict LRU (smallest lastuse) if all ways are valid. */
+    cache_sim.misses++;
+    if (victim == -1) {
+        uint32_t min_use = 0xffffffff;
+        for (way = 0; way < cache_sim.assoc; way++) {
+            const int i = base + way;
+            if (cache_sim.lastuse[i] < min_use) {
+                min_use = cache_sim.lastuse[i];
+                victim  = way;
+            }
+        }
+    }
+    {
+        const int i = base + victim;
+        cache_sim.valid[i]   = 1;
+        cache_sim.tag[i]     = tag;
+        cache_sim.lastuse[i] = cache_sim.clock;
+    }
+}
+
+int
+cache_sim_active(void)
+{
+    return cache_sim.sets ? 1 : 0;
+}
+
+int
+cache_sim_sets_get(void)
+{
+    return cache_sim.sets;
+}
+
+int
+cache_sim_assoc_get(void)
+{
+    return cache_sim.assoc;
+}
+
+int
+cache_sim_line_get(void)
+{
+    return cache_sim.line;
+}
+
+int
+cache_sim_size_get(void)
+{
+    return cache_sim.size;
+}
+
+uint64_t
+cache_sim_hits_get(void)
+{
+    return cache_sim.hits;
+}
+
+uint64_t
+cache_sim_misses_get(void)
+{
+    return cache_sim.misses;
+}
+
+/* Fill out[] (sets*assoc bytes) with per-line state: 0 = invalid, else
+   1+recency rank within the set (1 = most recently used .. assoc = LRU). */
+void
+cache_sim_map_get(uint8_t *out)
+{
+    if (!out || !cache_sim.sets)
+        return;
+    for (int s = 0; s < cache_sim.sets; s++) {
+        const int base = s * cache_sim.assoc;
+        for (int w = 0; w < cache_sim.assoc; w++) {
+            const int i = base + w;
+            if (!cache_sim.valid[i]) {
+                out[i] = 0;
+                continue;
+            }
+            int rank = 0;
+            for (int w2 = 0; w2 < cache_sim.assoc; w2++) {
+                const int j = base + w2;
+                if (cache_sim.valid[j] && (cache_sim.lastuse[j] > cache_sim.lastuse[i]))
+                    rank++;
+            }
+            out[i] = (uint8_t) (1 + rank);
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Bus activity bitmap implementation for the "Bus Waterfall" viewer.  */
+/* ------------------------------------------------------------------ */
+void
+bus_act_set_enabled(int enabled)
+{
+    bus_act_enabled = enabled ? 1 : 0;
+    free(bus_act);
+    bus_act = NULL;
+    bus_act_pages = 0;
+    if (bus_act_enabled) {
+        const uint32_t pages = mem_access_pages_get();
+        bus_act = (uint8_t *) calloc(pages ? pages : 1, 1);
+        bus_act_pages = pages;
+    }
+}
+
+void
+bus_act_ensure_sized(void)
+{
+    if (!bus_act_enabled)
+        return;
+    const uint32_t pages = mem_access_pages_get();
+    if (pages != bus_act_pages) {
+        free(bus_act);
+        bus_act = (uint8_t *) calloc(pages ? pages : 1, 1);
+        bus_act_pages = pages;
+    }
+}
+
+void
+bus_act_clear(void)
+{
+    if (bus_act && bus_act_pages)
+        memset(bus_act, 0, bus_act_pages);
+}
+
+uint8_t *
+bus_act_get(void)
+{
+    return bus_act;
+}
+
+uint32_t
+bus_act_pages_get(void)
+{
+    return bus_act_pages;
 }
 
 #ifdef ENABLE_MEM_LOG

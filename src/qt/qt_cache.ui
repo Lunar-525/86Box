@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Cache</class>
+ <widget class="QDialog" name="Cache">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>460</width>
+    <height>420</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>CPU Cache (approximate)</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="l1Group">
+     <property name="title">
+      <string>L1 cache</string>
+     </property>
+     <layout class="QFormLayout" name="l1Form">
+      <item row="0" column="0">
+       <widget class="QLabel" name="geoLabel">
+        <property name="text">
+         <string>Geometry</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="geoValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="hitLabel">
+        <property name="text">
+         <string>Hit rate</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="hitValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QProgressBar" name="hitBar">
+        <property name="maximum">
+         <number>100</number>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="countsLabel">
+        <property name="text">
+         <string>Hits / Misses</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLabel" name="countsValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="mapGroup">
+     <property name="title">
+      <string>Cache map (sets × ways)</string>
+     </property>
+     <layout class="QVBoxLayout" name="mapLayout">
+      <item>
+       <widget class="QLabel" name="cacheMap">
+        <property name="minimumSize">
+         <size>
+          <width>400</width>
+          <height>48</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="wsGroup">
+     <property name="title">
+      <string>Working set vs L1</string>
+     </property>
+     <layout class="QFormLayout" name="wsForm">
+      <item row="0" column="0">
+       <widget class="QLabel" name="wsLabel">
+        <property name="text">
+         <string>Working set</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="wsValue">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QProgressBar" name="wsBar">
+        <property name="maximum">
+         <number>100</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="noteLabel">
+     <property name="text">
+      <string>Approximate: fed by the gated access marks; JIT-inlined accesses are not all visible (page-granular in paged mode).</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="controlLayout">
+     <item>
+      <widget class="QLabel" name="refreshLabel">
+       <property name="text">
+        <string>Refresh (ms)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="refreshSpin">
+       <property name="minimum">
+        <number>50</number>
+       </property>
+       <property name="maximum">
+        <number>2000</number>
+       </property>
+       <property name="singleStep">
+        <number>10</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="liveCheck">
+       <property name="text">
+        <string>Live</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <spacer name="buttonSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="standardButtons">
+        <set>QDialogButtonBox::Close</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>Cache</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>410</x>
+     <y>400</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>230</x>
+     <y>210</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

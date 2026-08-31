@@ -3,8 +3,25 @@
 
 #include <QDialog>
 #include <QImage>
+#include <QWidget>
 
+class QPaintEvent;
 class QTimer;
+
+/* Detailed diagram of the first 1MB of guest RAM: content brightness with a
+   heat overlay, classic x86 region bands (conventional / video / adapter ROM
+   / BIOS) and address ticks. */
+class MemDetailStrip : public QWidget {
+public:
+    explicit MemDetailStrip(QWidget *parent = nullptr);
+    void setHeatEnabled(bool enabled);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    bool heat_on = true;
+};
 
 namespace Ui {
 class MemoryMap;

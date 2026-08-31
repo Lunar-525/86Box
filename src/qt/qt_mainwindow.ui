@@ -127,6 +127,9 @@
     <addaction name="actionPerformance"/>
     <addaction name="actionMemory_Map"/>
     <addaction name="actionChipset"/>
+    <addaction name="actionCache"/>
+    <addaction name="actionBranch"/>
+    <addaction name="actionWaterfall"/>
     <addaction name="separator"/>
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
@@ -712,6 +715,21 @@
   <action name="actionChipset">
    <property name="text">
     <string>&amp;Chipset…</string>
+   </property>
+  </action>
+  <action name="actionCache">
+   <property name="text">
+    <string>CPU &amp;Cache…</string>
+   </property>
+  </action>
+  <action name="actionBranch">
+   <property name="text">
+    <string>Branch Pre&amp;diction…</string>
+   </property>
+  </action>
+  <action name="actionWaterfall">
+   <property name="text">
+    <string>Bus &amp;Waterfall…</string>
    </property>
   </action>
   <action name="actionOpenGL">

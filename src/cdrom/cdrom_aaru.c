@@ -966,6 +966,12 @@ static int aaruf_identify_local(const char *filename)
 }
 
 int
+aaru_support_available(void)
+{
+    return ensure_libaaruformat();
+}
+
+int
 cdrom_image_is_aaru(const char *fn)
 {
     return (aaruf_identify_local(fn) == 100);
