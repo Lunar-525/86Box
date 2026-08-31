@@ -20,6 +20,7 @@
 #endif
 #define __STDC_FORMAT_MACROS
 #include <ctype.h>
+#include <errno.h>
 #include <inttypes.h>
 #ifdef IMAGE_VISO_LOG
 #include <stdarg.h>
@@ -804,8 +805,10 @@ viso_init(const uint8_t id, const char *dirname, int *error)
     uint8_t *p;
     *error        = 1;
 
-    if (viso == NULL)
+    if (viso == NULL) {
+        pclog("VISO: init failed - out of memory (viso)\n");
         goto end;
+    }
 
     char n[1024]        = { 0 };
 
@@ -820,8 +823,10 @@ viso_init(const uint8_t id, const char *dirname, int *error)
 
     /* Prepare temporary data buffers. */
     data = calloc(2, viso->sector_size);
-    if (!data)
+    if (!data) {
+        pclog("VISO: init failed - out of memory (data)\n");
         goto end;
+    }
 
         /* Open temporary file. */
 #ifdef IMAGE_VISO_LOG
@@ -831,8 +836,10 @@ viso_init(const uint8_t id, const char *dirname, int *error)
 #endif
         plat_tempfile(viso->tf.fn, "viso", ".tmp");
     viso->tf.fp = plat_fopen64(nvr_path(viso->tf.fn), "w+b");
-    if (!viso->tf.fp)
+    if (!viso->tf.fp) {
+        pclog("VISO: init failed - cannot create temp file \"%s\"\n", nvr_path(viso->tf.fn));
         goto end;
+    }
 
     /* Set up directory traversal. */
     image_viso_log(viso->tf.log, "Traversing directories:\n");
@@ -850,8 +857,10 @@ viso_init(const uint8_t id, const char *dirname, int *error)
     /* Fill root directory entry. */
     size_t dir_path_buf_size = strlen(dirname) + 1;
     last_entry = dir = last_dir = viso->root_dir = (viso_entry_t *) calloc(1, sizeof(viso_entry_t) + dir_path_buf_size);
-    if (!dir)
+    if (!dir) {
+        pclog("VISO: init failed - out of memory (root)\n");
         goto end;
+    }
     memcpy(dir->path, dirname, dir_path_buf_size);
     dir->parent = dir; /* for the root's path table and .. entries */
     image_viso_log(viso->tf.log, "[%08X] %s => [root]\n", dir, dir->path);
@@ -870,6 +879,8 @@ viso_init(const uint8_t id, const char *dirname, int *error)
                 viso_fill_stats(dir, &context, viso->format); /* populate stats */
             } else {
                 plat_dir_close(&context);
+                pclog("VISO: init failed - \"%s\" is not a directory (open=%d, is_dir=%d)\n",
+                      dir->path, have_dir, have_dir ? plat_dir_is_dir(&context) : 0);
                 goto end; /* not a directory */
             }
         }
@@ -1499,8 +1510,10 @@ next_entry:
 
             /* If we don't have enough memory, double the sector size. */
             viso->sector_size *= 2;
-            if ((viso->sector_size < VISO_SECTOR_SIZE) || (viso->sector_size > (1 << 30))) /* give up if sectors become too large */
+            if ((viso->sector_size < VISO_SECTOR_SIZE) || (viso->sector_size > (1 << 30))) { /* give up if sectors become too large */
+                pclog("VISO: init failed - entry map allocation failed (sector size %zu)\n", viso->sector_size);
                 goto end;
+            }
 
             /* Go through files, recalculating the entry map size. */
             size_t orig_entry_map_size = viso->entry_map_size;
@@ -1514,8 +1527,10 @@ next_entry:
                 }
                 entry = entry->next;
             }
-            if (viso->entry_map_size == orig_entry_map_size) /* give up if there was no change in map size */
+            if (viso->entry_map_size == orig_entry_map_size) { /* give up if there was no change in map size */
+                pclog("VISO: init failed - entry map size did not change\n");
                 goto end;
+            }
 
             /* Pad metadata to the new size's next sector. */
             while (ftello64(viso->tf.fp) % viso->sector_size)
@@ -1524,9 +1539,16 @@ next_entry:
     }
 
     /* Start sector counts. */
-    viso->metadata_sectors = ftello64(viso->tf.fp) / viso->sector_size;
+    {
+        const off_t meta_pos = ftello64(viso->tf.fp);
+        if (meta_pos < 0) {
+            pclog("VISO: init failed - temp file position error (ferror=%d errno=%d)\n",
+                  ferror(viso->tf.fp), errno);
+            goto end;
+        }
+        viso->metadata_sectors = (size_t) meta_pos / viso->sector_size;
+    }
     viso->all_sectors      = viso->metadata_sectors;
-
     /* Go through files, assigning sectors to them. */
     image_viso_log(viso->tf.log, "Assigning sectors to files:\n");
     size_t        base_factor  = viso->sector_size / orig_sector_size;
@@ -1596,8 +1618,11 @@ next_entry:
     image_viso_log(viso->tf.log, "Reading back %zu %zu-byte sectors of metadata\n",
                    viso->metadata_sectors, viso->sector_size);
     viso->metadata = (uint8_t *) calloc(viso->metadata_sectors, viso->sector_size);
-    if (viso->metadata == NULL)
+    if (viso->metadata == NULL) {
+        pclog("VISO: init failed - out of memory (metadata), tried %zu bytes\n",
+              viso->metadata_sectors * viso->sector_size);
         goto end;
+    }
     fseeko64(viso->tf.fp, 0, SEEK_SET);
     size_t metadata_size = viso->metadata_sectors * viso->sector_size;
     size_t metadata_remain = metadata_size;
@@ -1614,6 +1639,7 @@ next_entry:
 
     /* All good. */
     *error = 0;
+    pclog("VISO: init OK for \"%s\"\n", dirname);
 
 end:
     /* Set the function pointers. */

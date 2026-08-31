@@ -389,7 +389,12 @@ plat_dir_read_base(plat_dir_t *context)
 static inline int
 plat_dir_open(plat_dir_t *context, const char *path)
 {
-    if (LIKELY(context->find != -1))
+    /* Only close a directory fd we actually own: context->path is set only
+       after a successful open, and context->find is 0 in a zero-initialized
+       context. Closing it here would close fd 0 (stdin), and if a later
+       fopen reuses fd 0 (e.g. a VISO temp file), the next call would close
+       that file's descriptor, breaking all subsequent I/O on it. */
+    if (LIKELY((context->find != -1) && (context->path != NULL)))
         close(context->find);
 
     /* Open directory for reading. */

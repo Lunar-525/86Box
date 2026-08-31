@@ -237,12 +237,6 @@ add_library(ui STATIC
     qt_chipset.hpp
     qt_chipset.cpp
     qt_chipset.ui
-    qt_cache.hpp
-    qt_cache.cpp
-    qt_cache.ui
-    qt_branch.hpp
-    qt_branch.cpp
-    qt_branch.ui
     qt_waterfall.hpp
     qt_waterfall.cpp
     qt_waterfall.ui

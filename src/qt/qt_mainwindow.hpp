@@ -22,8 +22,6 @@ class RendererStack;
 class Performance;
 class MemoryMap;
 class Chipset;
-class Cache;
-class BranchPred;
 class Waterfall;
 
 namespace Ui {
@@ -141,8 +139,6 @@ private slots:
     void on_actionPerformance_triggered();
     void on_actionMemory_Map_triggered();
     void on_actionChipset_triggered();
-    void on_actionCache_triggered();
-    void on_actionBranch_triggered();
     void on_actionWaterfall_triggered();
     void on_actionPreferences_triggered();
     void on_actionEnable_Discord_integration_triggered(bool checked);
@@ -223,12 +219,6 @@ private:
 
     /* Tools > Chipset (bridge) activity viewer (single non-modal instance). */
     Chipset *chipsetDlg = nullptr;
-
-    /* Tools > CPU Cache (approximate) viewer (single non-modal instance). */
-    Cache *cacheDlg = nullptr;
-
-    /* Tools > Branch Prediction (approximate) viewer (single non-modal). */
-    BranchPred *branchDlg = nullptr;
 
     /* Tools > Bus Waterfall viewer (single non-modal instance). */
     Waterfall *waterfallDlg = nullptr;

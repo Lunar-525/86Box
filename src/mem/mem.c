@@ -171,12 +171,25 @@ mem_access_reset(void)
         memset(mem_access_heat, 0, mem_access_pages);
 }
 
+/* Reference count for the gated memory-access tracking: several viewer
+   windows (Memory Map, Bus Waterfall, Performance) may be open at once.
+   The heat array is (re)allocated only on the 0->1 transition, so opening a
+   second window never frees it while the emulation thread is marking pages
+   (which would be a use-after-free crash). */
+static int mem_access_refs = 0;
+
 void
 mem_access_set_enabled(int enabled)
 {
-    mem_access_enabled = enabled ? 1 : 0;
-    if (mem_access_enabled)
-        mem_access_reset();
+    if (enabled) {
+        if (mem_access_refs++ == 0) {
+            mem_access_enabled = 1;
+            mem_access_reset();
+        }
+    } else if (mem_access_refs > 0) {
+        if (--mem_access_refs == 0)
+            mem_access_enabled = 0;
+    }
 }
 
 void
@@ -231,6 +244,7 @@ typedef struct {
 } cache_sim_t;
 
 static cache_sim_t cache_sim;
+static cache_sim_t cache_sim_l2; /* second level, probed on L1 miss */
 
 /* Bus activity bitmap for the "Bus Waterfall" viewer (full implementation
    below); set from the gated access marks. */
@@ -332,12 +346,45 @@ mem_access_scan_ptes(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Approximate guest L1 cache simulator implementation.                */
+/* Approximate guest cache simulator implementation (L1 + L2).         */
 /* ------------------------------------------------------------------ */
+
+static void
+cache_sim_configure(cache_sim_t *c, int size, int assoc, int line)
+{
+    free(c->tag);
+    free(c->valid);
+    free(c->lastuse);
+    c->tag     = NULL;
+    c->valid   = NULL;
+    c->lastuse = NULL;
+
+    c->size  = size;
+    c->assoc = assoc;
+    c->line  = line;
+    c->sets  = (size && assoc && line) ? (size / assoc / line) : 0;
+    c->line_bits = 0;
+    while ((1u << c->line_bits) < (uint32_t) line)
+        c->line_bits++;
+    c->idx_bits = 0;
+    while ((1u << c->idx_bits) < (uint32_t) c->sets)
+        c->idx_bits++;
+    c->clock = 0;
+    c->hits = c->misses = 0;
+
+    if (c->sets) {
+        const int n = c->sets * assoc;
+        c->tag     = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
+        c->valid   = (uint8_t *) calloc((size_t) n, 1);
+        c->lastuse = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
+    }
+}
+
 void
 cache_sim_reset(void)
 {
     int size = 0, assoc = 0, line = 32;
+    int l2_size = 0, l2_assoc = 0, l2_line = 32;
 
     /* Geometry per emulated CPU class (approximate; from typical CPUID). */
     if (is486)
@@ -349,40 +396,90 @@ cache_sim_reset(void)
     else if (is586)
         size = 8192, assoc = 2;          /* Pentium/K5 D-cache */
 
-    free(cache_sim.tag);
-    free(cache_sim.valid);
-    free(cache_sim.lastuse);
-    cache_sim.tag     = NULL;
-    cache_sim.valid   = NULL;
-    cache_sim.lastuse = NULL;
+    /* L2 geometry per emulated CPU class (off-die/on-cartridge, approximate). */
+    if (is_p6)
+        l2_size = 512 * 1024, l2_assoc = 4;  /* Pentium Pro/II on-cartridge L2 */
+    else if (is_k6)
+        l2_size = 512 * 1024, l2_assoc = 2;  /* K6 motherboard L2 */
+    /* 486 / Pentium / K5: no modelled L2 for now */
 
-    cache_sim.size = size;
-    cache_sim.assoc = assoc;
-    cache_sim.line = line;
-    cache_sim.sets = (size && assoc && line) ? (size / assoc / line) : 0;
-    cache_sim.line_bits = 0;
-    while ((1u << cache_sim.line_bits) < (uint32_t) line)
-        cache_sim.line_bits++;
-    cache_sim.idx_bits = 0;
-    while ((1u << cache_sim.idx_bits) < (uint32_t) cache_sim.sets)
-        cache_sim.idx_bits++;
-    cache_sim.clock = 0;
-    cache_sim.hits = cache_sim.misses = 0;
+    cache_sim_configure(&cache_sim, size, assoc, line);
+    cache_sim_configure(&cache_sim_l2, l2_size, l2_assoc, l2_line);
+}
 
-    if (cache_sim.sets) {
-        const int n = cache_sim.sets * assoc;
-        cache_sim.tag     = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
-        cache_sim.valid   = (uint8_t *) calloc((size_t) n, 1);
-        cache_sim.lastuse = (uint32_t *) calloc((size_t) n, sizeof(uint32_t));
+/* Look up phys in cache c: returns 1 on hit (updating recency), 0 on miss. */
+static int
+cache_sim_lookup(cache_sim_t *c, uint32_t phys)
+{
+    if (!c->sets)
+        return 0;
+    const uint32_t idx = (phys >> c->line_bits) & ((1u << c->idx_bits) - 1);
+    const uint32_t tag = phys >> (c->line_bits + c->idx_bits);
+    const int base     = (int) idx * c->assoc;
+    c->clock++;
+    for (int way = 0; way < c->assoc; way++) {
+        const int i = base + way;
+        if (c->valid[i] && (c->tag[i] == tag)) {
+            c->lastuse[i] = c->clock;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Fill phys into cache c, evicting LRU if needed. */
+static void
+cache_sim_fill(cache_sim_t *c, uint32_t phys)
+{
+    if (!c->sets)
+        return;
+    const uint32_t idx = (phys >> c->line_bits) & ((1u << c->idx_bits) - 1);
+    const uint32_t tag = phys >> (c->line_bits + c->idx_bits);
+    const int base     = (int) idx * c->assoc;
+    int victim = -1;
+
+    for (int way = 0; way < c->assoc; way++) {
+        const int i = base + way;
+        if (!c->valid[i]) {
+            victim = way;
+            break;
+        }
+    }
+    if (victim == -1) {
+        uint32_t min_use = 0xffffffff;
+        for (int way = 0; way < c->assoc; way++) {
+            const int i = base + way;
+            if (c->lastuse[i] < min_use) {
+                min_use = c->lastuse[i];
+                victim  = way;
+            }
+        }
+    }
+    {
+        const int i = base + victim;
+        c->valid[i]   = 1;
+        c->tag[i]     = tag;
+        c->lastuse[i] = c->clock;
     }
 }
+
+/* Refcounted, like mem_access_set_enabled: the simulator arrays are rebuilt
+   only on the first enable, so a redundant enable never frees them while the
+   emulation thread is inside cache_sim_feed(). */
+static int cache_sim_refs = 0;
 
 void
 cache_sim_set_enabled(int enabled)
 {
-    cache_sim.enabled = enabled ? 1 : 0;
-    if (cache_sim.enabled)
-        cache_sim_reset();
+    if (enabled) {
+        if (cache_sim_refs++ == 0) {
+            cache_sim.enabled = 1;
+            cache_sim_reset();
+        }
+    } else if (cache_sim_refs > 0) {
+        if (--cache_sim_refs == 0)
+            cache_sim.enabled = 0;
+    }
 }
 
 void
@@ -391,41 +488,22 @@ cache_sim_feed(uint32_t phys)
     if (!cache_sim.enabled || !cache_sim.sets)
         return;
 
-    const uint32_t idx = (phys >> cache_sim.line_bits) & ((1u << cache_sim.idx_bits) - 1);
-    const uint32_t tag = phys >> (cache_sim.line_bits + cache_sim.idx_bits);
-    const int base     = (int) idx * cache_sim.assoc;
-    int way, victim = -1;
+    /* L1 first. */
+    if (cache_sim_lookup(&cache_sim, phys)) {
+        cache_sim.hits++;
+        return;
+    }
+    cache_sim.misses++;
+    cache_sim_fill(&cache_sim, phys);
 
-    cache_sim.clock++;
-
-    for (way = 0; way < cache_sim.assoc; way++) {
-        const int i = base + way;
-        if (cache_sim.valid[i] && (cache_sim.tag[i] == tag)) {
-            cache_sim.lastuse[i] = cache_sim.clock;
-            cache_sim.hits++;
+    /* On L1 miss, probe L2 (inclusive-style hierarchy). */
+    if (cache_sim_l2.sets) {
+        if (cache_sim_lookup(&cache_sim_l2, phys)) {
+            cache_sim_l2.hits++;
             return;
         }
-        if (!cache_sim.valid[i] && (victim == -1))
-            victim = way;
-    }
-
-    /* Miss: evict LRU (smallest lastuse) if all ways are valid. */
-    cache_sim.misses++;
-    if (victim == -1) {
-        uint32_t min_use = 0xffffffff;
-        for (way = 0; way < cache_sim.assoc; way++) {
-            const int i = base + way;
-            if (cache_sim.lastuse[i] < min_use) {
-                min_use = cache_sim.lastuse[i];
-                victim  = way;
-            }
-        }
-    }
-    {
-        const int i = base + victim;
-        cache_sim.valid[i]   = 1;
-        cache_sim.tag[i]     = tag;
-        cache_sim.lastuse[i] = cache_sim.clock;
+        cache_sim_l2.misses++;
+        cache_sim_fill(&cache_sim_l2, phys);
     }
 }
 
@@ -471,6 +549,110 @@ cache_sim_misses_get(void)
     return cache_sim.misses;
 }
 
+/* L2 accessors. */
+int
+cache_sim_l2_active(void)
+{
+    return cache_sim_l2.sets ? 1 : 0;
+}
+
+int
+cache_sim_l2_size_get(void)
+{
+    return cache_sim_l2.size;
+}
+
+int
+cache_sim_l2_assoc_get(void)
+{
+    return cache_sim_l2.assoc;
+}
+
+uint64_t
+cache_sim_l2_hits_get(void)
+{
+    return cache_sim_l2.hits;
+}
+
+uint64_t
+cache_sim_l2_misses_get(void)
+{
+    return cache_sim_l2.misses;
+}
+
+void
+cache_sim_l2_map_get(uint8_t *out)
+{
+    if (!out || !cache_sim_l2.sets)
+        return;
+    for (int s = 0; s < cache_sim_l2.sets; s++) {
+        const int base = s * cache_sim_l2.assoc;
+        for (int w = 0; w < cache_sim_l2.assoc; w++) {
+            const int i = base + w;
+            if (!cache_sim_l2.valid[i]) {
+                out[i] = 0;
+                continue;
+            }
+            int rank = 0;
+            for (int w2 = 0; w2 < cache_sim_l2.assoc; w2++) {
+                const int j = base + w2;
+                if (cache_sim_l2.valid[j] && (cache_sim_l2.lastuse[j] > cache_sim_l2.lastuse[i]))
+                    rank++;
+            }
+            out[i] = (uint8_t) (1 + rank);
+        }
+    }
+}
+
+/* Per-set GLOBAL recency heat for the reflowed L2 map: out[s] = 0 if set s is
+   empty, else 1..255 where 255 = touched very recently and low values = not
+   touched for a long time. (Using the per-line within-set rank turns every
+   fully-occupied set red; this global-age scaling keeps a filled cache
+   visually varied.) */
+void
+cache_sim_l2_set_heat_get(uint8_t *out)
+{
+    if (!out || !cache_sim_l2.sets)
+        return;
+    const int    sets  = cache_sim_l2.sets;
+    const int    assoc = cache_sim_l2.assoc;
+    uint32_t     max_age = 1;
+
+    for (int s = 0; s < sets; s++) {
+        const int base = s * assoc;
+        uint32_t mru = 0;
+        for (int w = 0; w < assoc; w++) {
+            const int i = base + w;
+            if (cache_sim_l2.valid[i] && (cache_sim_l2.lastuse[i] > mru))
+                mru = cache_sim_l2.lastuse[i];
+        }
+        if (mru) {
+            const uint32_t age = cache_sim_l2.clock - mru;
+            if (age > max_age)
+                max_age = age;
+        }
+    }
+
+    for (int s = 0; s < sets; s++) {
+        const int base = s * assoc;
+        uint32_t mru = 0;
+        for (int w = 0; w < assoc; w++) {
+            const int i = base + w;
+            if (cache_sim_l2.valid[i] && (cache_sim_l2.lastuse[i] > mru))
+                mru = cache_sim_l2.lastuse[i];
+        }
+        if (!mru) {
+            out[s] = 0;
+            continue;
+        }
+        const uint32_t age = cache_sim_l2.clock - mru;
+        int heat = 255 - (int) ((uint64_t) age * 255 / max_age);
+        if (heat < 1)
+            heat = 1;
+        out[s] = (uint8_t) heat;
+    }
+}
+
 /* Fill out[] (sets*assoc bytes) with per-line state: 0 = invalid, else
    1+recency rank within the set (1 = most recently used .. assoc = LRU). */
 void
@@ -500,17 +682,28 @@ cache_sim_map_get(uint8_t *out)
 /* ------------------------------------------------------------------ */
 /* Bus activity bitmap implementation for the "Bus Waterfall" viewer.  */
 /* ------------------------------------------------------------------ */
+static int bus_act_refs = 0;
+
 void
 bus_act_set_enabled(int enabled)
 {
-    bus_act_enabled = enabled ? 1 : 0;
-    free(bus_act);
-    bus_act = NULL;
-    bus_act_pages = 0;
-    if (bus_act_enabled) {
-        const uint32_t pages = mem_access_pages_get();
-        bus_act = (uint8_t *) calloc(pages ? pages : 1, 1);
-        bus_act_pages = pages;
+    if (enabled) {
+        if (bus_act_refs++ == 0) {
+            bus_act_enabled = 1;
+            free(bus_act);
+            bus_act = NULL;
+            bus_act_pages = 0;
+            const uint32_t pages = mem_access_pages_get();
+            bus_act = (uint8_t *) calloc(pages ? pages : 1, 1);
+            bus_act_pages = pages;
+        }
+    } else if (bus_act_refs > 0) {
+        if (--bus_act_refs == 0) {
+            bus_act_enabled = 0;
+            free(bus_act);
+            bus_act = NULL;
+            bus_act_pages = 0;
+        }
     }
 }
 

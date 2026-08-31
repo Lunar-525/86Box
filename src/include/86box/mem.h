@@ -285,6 +285,15 @@ extern uint64_t cache_sim_hits_get(void);
 extern uint64_t cache_sim_misses_get(void);
 extern void     cache_sim_map_get(uint8_t *out);
 
+/* L2 cache simulator accessors (mem.c). */
+extern int      cache_sim_l2_active(void);
+extern int      cache_sim_l2_size_get(void);
+extern int      cache_sim_l2_assoc_get(void);
+extern uint64_t cache_sim_l2_hits_get(void);
+extern uint64_t cache_sim_l2_misses_get(void);
+extern void     cache_sim_l2_map_get(uint8_t *out);
+extern void     cache_sim_l2_set_heat_get(uint8_t *out);
+
 /* Bus activity bitmap for the "Bus Waterfall" viewer (mem.c), gated. */
 extern int      bus_act_enabled;
 extern void     bus_act_set_enabled(int enabled);

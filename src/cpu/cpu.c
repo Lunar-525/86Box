@@ -4622,10 +4622,17 @@ branch_sim_feed(uint32_t branch_pc, int taken)
 void
 branch_sim_set_enabled(int enabled)
 {
-    branch_sim_enabled = enabled ? 1 : 0;
-    if (branch_sim_enabled) {
-        memset(branch_bht, 0, sizeof(branch_bht));
-        branch_total = branch_taken = branch_correct = branch_incorrect = 0;
+    static int branch_sim_refs = 0;
+
+    if (enabled) {
+        if (branch_sim_refs++ == 0) {
+            branch_sim_enabled = 1;
+            memset(branch_bht, 0, sizeof(branch_bht));
+            branch_total = branch_taken = branch_correct = branch_incorrect = 0;
+        }
+    } else if (branch_sim_refs > 0) {
+        if (--branch_sim_refs == 0)
+            branch_sim_enabled = 0;
     }
 }
 

@@ -28,8 +28,6 @@
 #include "qt_performance.hpp"
 #include "qt_memorymap.hpp"
 #include "qt_chipset.hpp"
-#include "qt_cache.hpp"
-#include "qt_branch.hpp"
 #include "qt_waterfall.hpp"
 #include "qt_preferences.hpp"
 #include "qt_mcadevicelist.hpp"
@@ -2496,32 +2494,6 @@ MainWindow::on_actionChipset_triggered()
     chipsetDlg->show();
     chipsetDlg->raise();
     chipsetDlg->activateWindow();
-}
-
-void
-MainWindow::on_actionCache_triggered()
-{
-    if (!cacheDlg) {
-        cacheDlg = new Cache(this);
-        cacheDlg->setAttribute(Qt::WA_DeleteOnClose);
-        connect(cacheDlg, &QObject::destroyed, this, [this] { cacheDlg = nullptr; });
-    }
-    cacheDlg->show();
-    cacheDlg->raise();
-    cacheDlg->activateWindow();
-}
-
-void
-MainWindow::on_actionBranch_triggered()
-{
-    if (!branchDlg) {
-        branchDlg = new BranchPred(this);
-        branchDlg->setAttribute(Qt::WA_DeleteOnClose);
-        connect(branchDlg, &QObject::destroyed, this, [this] { branchDlg = nullptr; });
-    }
-    branchDlg->show();
-    branchDlg->raise();
-    branchDlg->activateWindow();
 }
 
 void
