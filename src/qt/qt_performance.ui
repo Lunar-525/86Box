@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>560</width>
-    <height>600</height>
+    <width>640</width>
+    <height>520</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Performance</string>
+   <string>Performance — CPU &amp; Caches</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -28,17 +28,84 @@
          </property>
          <layout class="QVBoxLayout" name="cpuLayout">
           <item>
-           <widget class="CenterGauge" name="cpuGauge" native="true"/>
-          </item>
-          <item>
-           <widget class="QLabel" name="cpuInfoLabel">
-            <property name="text">
-             <string>—</string>
+           <widget class="CenterGauge" name="cpuGauge" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>56</height>
+             </size>
             </property>
-            <property name="wordWrap">
-             <bool>true</bool>
+            <property name="toolTip">
+             <string>Emulated speed relative to real time: green = faster than real time, red = slower. Below 100% the emulator cannot keep up.</string>
             </property>
            </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="cpuStats">
+            <item>
+             <layout class="QVBoxLayout" name="simCol">
+              <item>
+               <widget class="QLabel" name="simLabel">
+                <property name="text">
+                 <string>Simulated time (window)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="simValue">
+                <property name="text">
+                 <string>—</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="realCol">
+              <item>
+               <widget class="QLabel" name="realLabel">
+                <property name="text">
+                 <string>Real time (window)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="realValue">
+                <property name="text">
+                 <string>—</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="pctCol">
+              <item>
+               <widget class="QLabel" name="pctLabel">
+                <property name="text">
+                 <string>Real / simulated</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="pctValue">
+                <property name="text">
+                 <string>—</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -46,34 +113,37 @@
        <item>
         <widget class="QGroupBox" name="l1Group">
          <property name="title">
-          <string>L1 cache (approximate)</string>
+          <string>L1 cache</string>
          </property>
          <layout class="QVBoxLayout" name="l1VLayout">
           <item>
            <layout class="QFormLayout" name="l1Form">
             <item row="0" column="0">
-             <widget class="QLabel" name="geoLabel">
+             <widget class="QLabel" name="l1GeoLabel">
               <property name="text">
                <string>Geometry</string>
               </property>
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QLabel" name="geoValue">
+             <widget class="QLabel" name="l1GeoValue">
               <property name="text">
                <string>—</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
               </property>
              </widget>
             </item>
             <item row="1" column="0">
-             <widget class="QLabel" name="hitLabel">
+             <widget class="QLabel" name="l1HitLabel">
               <property name="text">
-               <string>Hit rate</string>
+               <string>Hit rate (window)</string>
               </property>
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QLabel" name="hitValue">
+             <widget class="QLabel" name="l1HitValue">
               <property name="text">
                <string>—</string>
               </property>
@@ -83,21 +153,41 @@
              </widget>
             </item>
             <item row="2" column="1">
-             <widget class="QProgressBar" name="hitBar">
+             <widget class="QProgressBar" name="l1HitBar">
+              <property name="format">
+               <string>%p%</string>
+              </property>
               <property name="maximum">
                <number>100</number>
               </property>
              </widget>
             </item>
             <item row="3" column="0">
-             <widget class="QLabel" name="countsLabel">
+             <widget class="QLabel" name="l1WCountsLabel">
               <property name="text">
-               <string>Hits / Misses</string>
+               <string>Hits / Misses (window)</string>
               </property>
              </widget>
             </item>
             <item row="3" column="1">
-             <widget class="QLabel" name="countsValue">
+             <widget class="QLabel" name="l1WCountsValue">
+              <property name="text">
+               <string>—</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="l1TCountsLabel">
+              <property name="text">
+               <string>Hits / Misses (total)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QLabel" name="l1TCountsValue">
               <property name="text">
                <string>—</string>
               </property>
@@ -109,15 +199,18 @@
            </layout>
           </item>
           <item>
-           <widget class="QLabel" name="cacheMap">
+           <widget class="QLabel" name="l1Map">
             <property name="minimumSize">
              <size>
               <width>400</width>
-              <height>44</height>
+              <height>60</height>
              </size>
             </property>
             <property name="text">
              <string>—</string>
+            </property>
+            <property name="toolTip">
+             <string>L1 sets × ways grid: green = most recently used way, red = least recently used, grey = untouched.</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
@@ -125,12 +218,12 @@
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="cacheLegend">
+           <widget class="QLabel" name="l1Legend">
             <property name="text">
-             <string>&lt;span style=&quot;color:#222&quot;&gt;■■&lt;/span&gt; empty &amp;nbsp; &lt;span style=&quot;color:#4CAF50&quot;&gt;■■&lt;/span&gt; MRU &amp;nbsp; &lt;span style=&quot;color:#FF9800&quot;&gt;■■&lt;/span&gt; &amp;nbsp; &lt;span style=&quot;color:#E53935&quot;&gt;■■&lt;/span&gt; LRU</string>
+             <string>&lt;span style=&quot;color:#555555&quot;&gt;■■&lt;/span&gt; untouched &amp;nbsp; &lt;span style=&quot;color:#4CAF50&quot;&gt;■■&lt;/span&gt; recent &amp;nbsp; &lt;span style=&quot;color:#FF9800&quot;&gt;■■&lt;/span&gt; mid &amp;nbsp; &lt;span style=&quot;color:#E53935&quot;&gt;■■&lt;/span&gt; old — sets × ways</string>
             </property>
             <property name="alignment">
-             <set>Qt::AlignCenter</set>
+             <set>Qt::AlignLeft</set>
             </property>
            </widget>
           </item>
@@ -140,7 +233,7 @@
        <item>
         <widget class="QGroupBox" name="l2Group">
          <property name="title">
-          <string>L2 cache (approximate)</string>
+          <string>L2 cache</string>
          </property>
          <layout class="QVBoxLayout" name="l2VLayout">
           <item>
@@ -157,12 +250,15 @@
               <property name="text">
                <string>—</string>
               </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
+              </property>
              </widget>
             </item>
             <item row="1" column="0">
              <widget class="QLabel" name="l2HitLabel">
               <property name="text">
-               <string>Hit rate</string>
+               <string>Hit rate (window)</string>
               </property>
              </widget>
             </item>
@@ -178,20 +274,40 @@
             </item>
             <item row="2" column="1">
              <widget class="QProgressBar" name="l2HitBar">
+              <property name="format">
+               <string>%p%</string>
+              </property>
               <property name="maximum">
                <number>100</number>
               </property>
              </widget>
             </item>
             <item row="3" column="0">
-             <widget class="QLabel" name="l2CountsLabel">
+             <widget class="QLabel" name="l2WCountsLabel">
               <property name="text">
-               <string>Hits / Misses</string>
+               <string>Hits / Misses (window)</string>
               </property>
              </widget>
             </item>
             <item row="3" column="1">
-             <widget class="QLabel" name="l2CountsValue">
+             <widget class="QLabel" name="l2WCountsValue">
+              <property name="text">
+               <string>—</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="l2TCountsLabel">
+              <property name="text">
+               <string>Hits / Misses (total)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QLabel" name="l2TCountsValue">
               <property name="text">
                <string>—</string>
               </property>
@@ -207,11 +323,14 @@
             <property name="minimumSize">
              <size>
               <width>400</width>
-              <height>120</height>
+              <height>60</height>
              </size>
             </property>
             <property name="text">
              <string>—</string>
+            </property>
+            <property name="toolTip">
+             <string>L2 heat map, one cell per set: green = recently accessed, red = long untouched, grey = never touched.</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
@@ -221,10 +340,10 @@
           <item>
            <widget class="QLabel" name="l2Legend">
             <property name="text">
-             <string>&lt;span style=&quot;color:#222&quot;&gt;■■&lt;/span&gt; empty &amp;nbsp; &lt;span style=&quot;color:#4CAF50&quot;&gt;■■&lt;/span&gt; MRU &amp;nbsp; &lt;span style=&quot;color:#FF9800&quot;&gt;■■&lt;/span&gt; &amp;nbsp; &lt;span style=&quot;color:#E53935&quot;&gt;■■&lt;/span&gt; LRU</string>
+             <string>&lt;span style=&quot;color:#555555&quot;&gt;■■&lt;/span&gt; untouched &amp;nbsp; &lt;span style=&quot;color:#4CAF50&quot;&gt;■■&lt;/span&gt; recent &amp;nbsp; &lt;span style=&quot;color:#FF9800&quot;&gt;■■&lt;/span&gt; mid &amp;nbsp; &lt;span style=&quot;color:#E53935&quot;&gt;■■&lt;/span&gt; old — one cell per set</string>
             </property>
             <property name="alignment">
-             <set>Qt::AlignCenter</set>
+             <set>Qt::AlignLeft</set>
             </property>
            </widget>
           </item>
@@ -234,7 +353,7 @@
        <item>
         <widget class="QGroupBox" name="wsGroup">
          <property name="title">
-          <string>Working set vs cache</string>
+          <string>Working set</string>
          </property>
          <layout class="QHBoxLayout" name="wsHLayout">
           <item>
@@ -251,8 +370,11 @@
               <property name="text">
                <string>—</string>
               </property>
+              <property name="toolTip">
+               <string>Distinct 4 KB pages touched since this window opened.</string>
+              </property>
               <property name="alignment">
-               <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
               </property>
              </widget>
             </item>
@@ -279,6 +401,9 @@
             </item>
             <item>
              <widget class="QProgressBar" name="wsBar">
+              <property name="format">
+               <string>%p%</string>
+              </property>
               <property name="maximum">
                <number>100</number>
               </property>
@@ -307,109 +432,11 @@
             </item>
             <item>
              <widget class="QProgressBar" name="ws2Bar">
+              <property name="format">
+               <string>%p%</string>
+              </property>
               <property name="maximum">
                <number>100</number>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="bhtGroup">
-         <property name="title">
-          <string>BHT - 2-bit saturating counters (approximate)</string>
-         </property>
-         <layout class="QHBoxLayout" name="bhtHLayout">
-          <item>
-           <widget class="QLabel" name="bhtMap">
-            <property name="minimumSize">
-             <size>
-              <width>200</width>
-              <height>110</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>—</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <layout class="QVBoxLayout" name="bhtRight">
-            <item>
-             <layout class="QFormLayout" name="bhtForm">
-              <item row="0" column="0">
-               <widget class="QLabel" name="accLabel">
-                <property name="text">
-                 <string>Prediction accuracy</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="accValue">
-                <property name="text">
-                 <string>—</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QProgressBar" name="accBar">
-                <property name="maximum">
-                 <number>100</number>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="takenLabel">
-                <property name="text">
-                 <string>Taken rate</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QLabel" name="takenValue">
-                <property name="text">
-                 <string>—</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="bcountsLabel">
-                <property name="text">
-                 <string>Correct / Incorrect</string>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QLabel" name="bcountsValue">
-                <property name="text">
-                 <string>—</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <widget class="QLabel" name="bhtLegend">
-              <property name="text">
-               <string>&lt;span style=&quot;color:#1A237E&quot;&gt;■■&lt;/span&gt; 00 strong not-taken &amp;nbsp; &lt;span style=&quot;color:#42A5F5&quot;&gt;■■&lt;/span&gt; 01 weak not-taken &lt;br/&gt;&lt;span style=&quot;color:#FFA726&quot;&gt;■■&lt;/span&gt; 10 weak taken &amp;nbsp; &lt;span style=&quot;color:#E53935&quot;&gt;■■&lt;/span&gt; 11 strong taken</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignLeft</set>
               </property>
              </widget>
             </item>
@@ -475,7 +502,7 @@
    <item>
     <widget class="QLabel" name="noteLabel">
      <property name="text">
-      <string>Cache and branch metrics are approximate: fed by gated access/branch marks; JIT-inlined accesses are not all visible.</string>
+      <string>Cache and memory metrics are approximate: fed by gated access marks; JIT-inlined accesses are not all visible.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -525,12 +552,12 @@
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>510</x>
-     <y>580</y>
+     <x>590</x>
+     <y>500</y>
     </hint>
     <hint type="destinationlabel">
-     <x>280</x>
-     <y>300</y>
+     <x>320</x>
+     <y>260</y>
     </hint>
    </hints>
   </connection>

@@ -231,6 +231,9 @@ add_library(ui STATIC
     qt_performance.hpp
     qt_performance.cpp
     qt_performance.ui
+    qt_performance_pipeline.hpp
+    qt_performance_pipeline.cpp
+    qt_performance_pipeline.ui
     qt_memorymap.hpp
     qt_memorymap.cpp
     qt_memorymap.ui

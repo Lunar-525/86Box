@@ -124,7 +124,14 @@
     <addaction name="separator"/>
     <addaction name="menuSound"/>
     <addaction name="separator"/>
-    <addaction name="actionPerformance"/>
+    <widget class="QMenu" name="menuPerformance">
+     <property name="title">
+      <string>Per&amp;formance</string>
+     </property>
+     <addaction name="actionPerformance"/>
+     <addaction name="actionPerformancePipeline"/>
+    </widget>
+    <addaction name="menuPerformance"/>
     <addaction name="actionMemory_Map"/>
     <addaction name="actionChipset"/>
     <addaction name="actionWaterfall"/>
@@ -702,7 +709,12 @@
   </action>
   <action name="actionPerformance">
    <property name="text">
-    <string>Per&amp;formance…</string>
+    <string>&amp;CPU &amp; Caches…</string>
+   </property>
+  </action>
+  <action name="actionPerformancePipeline">
+   <property name="text">
+    <string>&amp;Branches &amp; Pipeline…</string>
    </property>
   </action>
   <action name="actionMemory_Map">

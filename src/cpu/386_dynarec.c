@@ -609,6 +609,9 @@ exec386_dynarec_dyn(void)
     {
         void (*code)(void) = (void *) &block->data[BLOCK_START];
 
+        if (pp_enabled)
+            pp_block_execute(get_block_nr(block));
+
 #    ifndef USE_NEW_DYNAREC
         codeblock_hash[hash] = block;
 #    endif

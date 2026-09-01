@@ -209,6 +209,26 @@ extern uint64_t  branch_sim_correct_get(void);
 extern uint64_t  branch_sim_incorrect_get(void);
 extern void      branch_sim_map_get(uint8_t *out);
 
+/* Approximate CPU pipeline profiler (codegen_new/codegen_block.c), gated.
+   Retired uOps/instruction mix from the JIT IR; combine with cpu_tsc_get()
+   for retired uOps per cycle and stall-ATTRIBUTION heuristics. */
+extern int       pp_enabled;
+extern void      pp_set_enabled(int enabled);
+extern void      pp_block_execute(int block_nr);
+extern void      pp_hist_get(uint64_t *out);
+extern uint64_t  pp_uops_get(void);
+extern uint64_t  pp_ins_get(void);
+extern uint64_t  pp_alu_get(void);
+extern uint64_t  pp_load_get(void);
+extern uint64_t  pp_store_get(void);
+extern uint64_t  pp_branch_get(void);
+extern uint64_t  pp_fpu_get(void);
+extern uint64_t  pp_shift_get(void);
+extern uint64_t  pp_mmx_get(void);
+extern uint64_t  pp_misc_get(void);
+extern uint64_t  cpu_tsc_get(void);
+extern int       pp_issue_width_get(void);
+
 #define window_x monitor_settings[0].mon_window_x
 #define window_y monitor_settings[0].mon_window_y
 #define window_w monitor_settings[0].mon_window_w

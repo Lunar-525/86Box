@@ -634,6 +634,9 @@ codegen_generate_call(uint8_t opcode, OpFn op, uint32_t fetchdat, uint32_t new_p
     }
 
 generate_call:
+    if (pp_enabled)
+        pp_block_op_inc(block_current, opcode);
+
     codegen_instructions[block->ins].pc        = cpu_state.oldpc;
     codegen_instructions[block->ins].op_ssegs  = last_op_ssegs;
     codegen_instructions[block->ins].op_ea_seg = last_op_ea_seg;

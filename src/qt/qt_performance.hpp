@@ -2,6 +2,7 @@
 #define QT_PERFORMANCE_HPP
 
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QString>
 #include <QWidget>
@@ -13,7 +14,7 @@ class QTimer;
 
 /* Horizontal gauge with 100% in the middle: below 100% fills to the left
    (slower than real time), above 100% fills to the right (faster than real
-   time). */
+   time). Values beyond 200% clamp the fill and draw a ">>" marker. */
 class CenterGauge : public QWidget {
 public:
     explicit CenterGauge(QWidget *parent = nullptr);
@@ -34,8 +35,8 @@ namespace Ui {
 class Performance;
 }
 
-/* Combined performance viewer: CPU speed gauge, approximate L1 cache and
-   branch-prediction (BHT) monitors, all fed by the gated simulators. */
+/* CPU speed gauge, approximate L1/L2 cache monitors and working-set view,
+   fed by the gated simulators. */
 class Performance : public QDialog {
     Q_OBJECT
 
@@ -48,7 +49,6 @@ private slots:
 
 private:
     void renderCacheMap();
-    void renderBhtMap();
     void renderL2Map();
 
     Ui::Performance *ui;
@@ -67,12 +67,6 @@ private:
     QImage   l2MapImage;
     uint64_t last_l2_hits   = 0;
     uint64_t last_l2_misses = 0;
-
-    /* Branch prediction. */
-    QImage   bhtMapImage;
-    uint64_t last_total     = 0;
-    uint64_t last_correct   = 0;
-    uint64_t last_incorrect = 0;
 };
 
 #endif // QT_PERFORMANCE_HPP

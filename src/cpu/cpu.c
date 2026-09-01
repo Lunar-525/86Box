@@ -4678,3 +4678,21 @@ branch_sim_map_get(uint8_t *out)
     if (out)
         memcpy(out, branch_bht, BRANCH_SIM_ENTRIES);
 }
+
+uint64_t
+cpu_tsc_get(void)
+{
+    return tsc;
+}
+
+/* Approximate issue width for the pipeline profiler: uOps retired per cycle
+   that a fully busy pipeline of this class could sustain. */
+int
+pp_issue_width_get(void)
+{
+    if (is_p6)
+        return 3;                    /* Pentium Pro/II: up to 3 uOps/cycle */
+    if (is586 || is_k6)
+        return 2;                    /* Pentium/K5/K6: dual-issue */
+    return 1;                        /* 486 and below: scalar */
+}

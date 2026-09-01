@@ -26,6 +26,7 @@
 #include "qt_specifydimensions.h"
 #include "qt_soundgain.hpp"
 #include "qt_performance.hpp"
+#include "qt_performance_pipeline.hpp"
 #include "qt_memorymap.hpp"
 #include "qt_chipset.hpp"
 #include "qt_waterfall.hpp"
@@ -2468,6 +2469,19 @@ MainWindow::on_actionPerformance_triggered()
     perfDlg->show();
     perfDlg->raise();
     perfDlg->activateWindow();
+}
+
+void
+MainWindow::on_actionPerformancePipeline_triggered()
+{
+    if (!perfPipeDlg) {
+        perfPipeDlg = new PerformancePipeline(this);
+        perfPipeDlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(perfPipeDlg, &QObject::destroyed, this, [this] { perfPipeDlg = nullptr; });
+    }
+    perfPipeDlg->show();
+    perfPipeDlg->raise();
+    perfPipeDlg->activateWindow();
 }
 
 void

@@ -552,6 +552,10 @@ codegen_get_ir_data(void)
     return ir_data;
 }
 
+/* Pipeline-profiler hooks defined at the end of this file. */
+void pp_block_census(codeblock_t *block, ir_data_t *ir);
+void pp_block_start(int nr);
+
 void
 codegen_block_start_recompile(codeblock_t *block)
 {
@@ -562,6 +566,9 @@ codegen_block_start_recompile(codeblock_t *block)
 
     block_num     = HASH(block->phys);
     block_current = get_block_nr(block); // block->pnt;
+
+    if (pp_enabled)
+        pp_block_start(block_current);
 
 #ifndef RELEASE_BUILD
     if (block->pc != cs + cpu_state.pc || (block->flags & CODEBLOCK_WAS_RECOMPILED))
@@ -770,6 +777,10 @@ codegen_block_end(void)
     add_to_block_list(block);
 }
 
+/* Called from codegen_block_end_recompile() below (defined at the end of this
+   file, where the full pipeline-profiler module lives). */
+void pp_block_census(codeblock_t *block, ir_data_t *ir);
+
 void
 codegen_block_end_recompile(codeblock_t *block)
 {
@@ -789,6 +800,8 @@ codegen_block_end_recompile(codeblock_t *block)
         block->flags &= ~CODEBLOCK_STATIC_TOP;
 
     codegen_accumulate_flush(ir_data);
+    if (pp_enabled)
+        pp_block_census(block, ir_data);
     codegen_ir_compile(ir_data, block);
 }
 
@@ -847,3 +860,175 @@ codegen_mark_code_present_multibyte(codeblock_t *block, uint32_t start_pc, int l
         }
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* Approximate CPU pipeline profiler.                                  */
+/* Gated (viewer open). At block compile time we walk the generated IR */
+/* and record each block's micro-op mix (its true "pipeline work"); at */
+/* block execution we accumulate it into running window totals. The Qt */
+/* side combines these with the guest TSC to derive retired uOps/cycle,*/
+/* utilization and honest stall-ATTRIBUTION heuristics (never exact).  */
+/* ------------------------------------------------------------------ */
+#define PP_TOPS_PER_BLOCK 32
+
+typedef struct {
+    uint16_t op;   /* x86 opcode byte */
+    uint32_t cnt;
+} pp_top_t;
+
+typedef struct {
+    uint16_t nops;
+    pp_top_t tops[PP_TOPS_PER_BLOCK];
+} pp_block_ops_t;
+
+typedef struct {
+    uint32_t uops, ins;
+    uint32_t alu, load, store, branch, fpu, shift, mmx, misc;
+    pp_block_ops_t ops; /* distinct opcodes executed by this block */
+} pp_block_t;
+
+int       pp_enabled = 0;
+static pp_block_t  *pp_blocks = NULL;
+static uint64_t pp_uops, pp_ins;
+static uint64_t pp_alu, pp_load, pp_store, pp_branch, pp_fpu, pp_shift, pp_mmx, pp_misc;
+static uint64_t pp_op_hist[256];
+
+static void
+pp_classify_uop(uint32_t t, pp_block_t *p)
+{
+    const uint32_t op = t & 0xff; /* uOp opcode is in the low byte; flags are high */
+    switch (op) {
+        case 0x28: case 0x29: case 0x2a: /* MOV_REG_PTR, MOVZX_REG_PTR_8/16 */
+        case 0x40: case 0x41:            /* MEM_LOAD_ABS/REG */
+        case 0x47: case 0x49:            /* MEM_LOAD_SINGLE/DOUBLE */
+            p->load++;
+            break;
+        case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: /* MEM_STORE_* */
+        case 0x4a: case 0x4b:            /* MEM_STORE_SINGLE/DOUBLE */
+            p->store++;
+            break;
+        case 0x15: case 0x17:            /* JMP, JMP_DEST */
+        case 0x48: case 0x4c: case 0x4d: /* CMP_IMM_JZ, CMP_JB, CMP_JNBE */
+        case 0x60 ... 0x71:              /* CMP_*_DEST + TEST_J*_DEST */
+            p->branch++;
+            break;
+        case 0x25: case 0x26: case 0x27: /* MOV_DOUBLE_INT, MOV_INT_DOUBLE* */
+        case 0x80 ... 0x8a:              /* FPU uOps */
+            p->fpu++;
+            break;
+        case 0x90 ... 0xce:              /* MMX / 3DNow */
+            p->mmx++;
+            break;
+        case 0x50 ... 0x59:              /* shifts / rotates */
+            p->shift++;
+            break;
+        case 0x20 ... 0x24:              /* MOV / MOVZX / MOVSX */
+        case 0x30 ... 0x3b:              /* ADD / AND / OR / SUB / XOR / ANDN */
+            p->alu++;
+            break;
+        default:
+            p->misc++;
+            break;
+    }
+    p->uops++;
+}
+
+void
+pp_block_census(codeblock_t *block, ir_data_t *ir)
+{
+    if (!pp_blocks || !block || !ir)
+        return;
+    const int nr = get_block_nr(block);
+    if ((nr < 0) || (nr >= BLOCK_SIZE))
+        return;
+    pp_block_t *p = &pp_blocks[nr];
+    /* Zero the uOp fields only; the opcode list was built during generation. */
+    p->uops = p->ins = 0;
+    p->alu = p->load = p->store = p->branch = p->fpu = p->shift = p->mmx = p->misc = 0;
+    p->ins = block->ins;
+    for (int i = 0; i < ir->wr_pos; i++)
+        pp_classify_uop(ir->uops[i].type, p);
+}
+
+/* Called at block generation start (codegen_block_start_recompile). */
+void
+pp_block_start(int nr)
+{
+    if (pp_blocks && (nr >= 0) && (nr < BLOCK_SIZE))
+        memset(&pp_blocks[nr], 0, sizeof(pp_block_t));
+}
+
+/* Called once per generated x86 instruction with its opcode byte. */
+void
+pp_block_op_inc(int nr, uint8_t op)
+{
+    if (!pp_enabled || !pp_blocks || (nr < 0) || (nr >= BLOCK_SIZE))
+        return;
+    pp_block_t *p = &pp_blocks[nr];
+    for (int i = 0; i < p->ops.nops; i++) {
+        if (p->ops.tops[i].op == op) {
+            if (p->ops.tops[i].cnt < 0xffffffffu)
+                p->ops.tops[i].cnt++;
+            return;
+        }
+    }
+    if (p->ops.nops < PP_TOPS_PER_BLOCK) {
+        p->ops.tops[p->ops.nops].op  = op;
+        p->ops.tops[p->ops.nops].cnt = 1;
+        p->ops.nops++;
+    }
+}
+
+void
+pp_block_execute(int nr)
+{
+    if (!pp_enabled || !pp_blocks || (nr < 0) || (nr >= BLOCK_SIZE))
+        return;
+    const pp_block_t *p = &pp_blocks[nr];
+    pp_uops += p->uops;
+    pp_ins  += p->ins;
+    pp_alu  += p->alu;
+    pp_load += p->load;
+    pp_store += p->store;
+    pp_branch += p->branch;
+    pp_fpu   += p->fpu;
+    pp_shift += p->shift;
+    pp_mmx   += p->mmx;
+    pp_misc  += p->misc;
+    for (int i = 0; i < p->ops.nops; i++)
+        pp_op_hist[p->ops.tops[i].op & 0xff] += p->ops.tops[i].cnt;
+}
+
+void
+pp_set_enabled(int enabled)
+{
+    pp_enabled = enabled ? 1 : 0;
+    if (pp_enabled) {
+        if (!pp_blocks)
+            pp_blocks = (pp_block_t *) calloc(BLOCK_SIZE, sizeof(pp_block_t));
+        memset(pp_blocks, 0, (size_t) BLOCK_SIZE * sizeof(pp_block_t));
+        memset(pp_op_hist, 0, sizeof(pp_op_hist));
+        pp_uops = pp_ins = 0;
+        pp_alu = pp_load = pp_store = pp_branch = pp_fpu = pp_shift = pp_mmx = pp_misc = 0;
+    }
+}
+
+/* Copy the cumulative opcode histogram (256 entries) for the Qt side to
+   compute window deltas and sort the top instructions. */
+void
+pp_hist_get(uint64_t *out)
+{
+    if (out)
+        memcpy(out, pp_op_hist, sizeof(pp_op_hist));
+}
+
+uint64_t pp_uops_get(void)   { return pp_uops; }
+uint64_t pp_ins_get(void)    { return pp_ins; }
+uint64_t pp_alu_get(void)    { return pp_alu; }
+uint64_t pp_load_get(void)   { return pp_load; }
+uint64_t pp_store_get(void)  { return pp_store; }
+uint64_t pp_branch_get(void) { return pp_branch; }
+uint64_t pp_fpu_get(void)    { return pp_fpu; }
+uint64_t pp_shift_get(void)  { return pp_shift; }
+uint64_t pp_mmx_get(void)    { return pp_mmx; }
+uint64_t pp_misc_get(void)   { return pp_misc; }

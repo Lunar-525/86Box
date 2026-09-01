@@ -20,6 +20,7 @@ extern QTimer discordupdate;
 class MediaMenu;
 class RendererStack;
 class Performance;
+class PerformancePipeline;
 class MemoryMap;
 class Chipset;
 class Waterfall;
@@ -137,6 +138,7 @@ private slots:
     void on_actionMute_Unmute_triggered();
     void on_actionSound_gain_triggered();
     void on_actionPerformance_triggered();
+    void on_actionPerformancePipeline_triggered();
     void on_actionMemory_Map_triggered();
     void on_actionChipset_triggered();
     void on_actionWaterfall_triggered();
@@ -211,8 +213,11 @@ private:
     /* Mouse capture state before showing fullscreen UI */
     bool mouse_was_captured = false;
 
-    /* Tools > Performance indicator dialog (single non-modal instance). */
+    /* Tools > Performance > CPU & Caches dialog (single non-modal instance). */
     Performance *perfDlg = nullptr;
+
+    /* Tools > Performance > Branches & Pipeline dialog (single non-modal instance). */
+    PerformancePipeline *perfPipeDlg = nullptr;
 
     /* Tools > Memory Map viewer (single non-modal instance). */
     MemoryMap *memMapDlg = nullptr;

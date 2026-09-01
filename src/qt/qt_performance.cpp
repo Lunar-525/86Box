@@ -6,11 +6,10 @@
  *
  *          This file is part of the 86Box distribution.
  *
- *          Combined performance viewer: virtual CPU speed gauge (100% in the
- *          middle), an approximate L1 cache monitor (hit rate, sets x ways
- *          cache map, working set) and an approximate branch-prediction
- *          monitor (BHT accuracy and map). Data comes from the cpu_time_*,
- *          cache_sim_* and branch_sim_* modules.
+ *          Performance — CPU & Caches view: virtual CPU speed gauge (100% in
+ *          the middle), approximate L1/L2 cache monitors (hit rate, sets x
+ *          ways cache map) and a working-set view. Data comes from the
+ *          cpu_time_*, cache_sim_* and mem_access_* modules.
  */
 #include "qt_performance.hpp"
 #include "ui_qt_performance.h"
@@ -21,6 +20,7 @@ extern "C" {
 }
 
 #include <QCheckBox>
+#include <QGroupBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QProgressBar>
@@ -29,6 +29,21 @@ extern "C" {
 
 #include <algorithm>
 #include <cstdio>
+
+/* Three-stop heat colour: green (recent) -> orange (mid) -> red (old).
+   t in [0,1], 0 = most recently used, 1 = least recently used. */
+static QRgb
+heatColor(double t)
+{
+    static const QColor g(0x4c, 0xaf, 0x50), o(0xff, 0x98, 0x00), r(0xe5, 0x39, 0x35);
+    const QColor      from = (t < 0.5) ? g : o;
+    const QColor      to   = (t < 0.5) ? o : r;
+    const double      k    = (t < 0.5) ? (t * 2.0) : ((t - 0.5) * 2.0);
+    return QColor((int) (from.red() + (to.red() - from.red()) * k),
+                  (int) (from.green() + (to.green() - from.green()) * k),
+                  (int) (from.blue() + (to.blue() - from.blue()) * k))
+        .rgb();
+}
 
 /* ------------------------------------------------------------------ */
 /* CenterGauge: horizontal bar, 100% in the middle.                    */
@@ -112,6 +127,15 @@ CenterGauge::paintEvent(QPaintEvent *event)
     p.drawText(QRectF(bar.left(), bar.top(), 40, bar.height()), Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("0%"));
     p.drawText(QRectF(bar.right() - 40, bar.top(), 40, bar.height()), Qt::AlignVCenter | Qt::AlignRight, QStringLiteral("200%"));
 
+    /* Beyond 200% the fill is clamped: mark it with ">>". */
+    if (over > 100.0) {
+        p.setPen(QColor(0x4c, 0xaf, 0x50));
+        QFont mf = f;
+        mf.setBold(true);
+        p.setFont(mf);
+        p.drawText(QRectF(bar.right() - 44, bar.top(), 40, bar.height()), Qt::AlignVCenter | Qt::AlignRight, QStringLiteral(">>"));
+    }
+
     /* Value text, bold, centred in the reserved top strip. */
     if (!text.isEmpty()) {
         QFont tf = font();
@@ -134,7 +158,6 @@ Performance::Performance(QWidget *parent)
     /* Enable the gated monitors while this window is open. */
     mem_access_set_enabled(1);
     cache_sim_set_enabled(1);
-    branch_sim_set_enabled(1);
 
     last_guest_ns = cpu_time_guest_ns_get();
     last_real_ns  = cpu_time_real_ns_get();
@@ -159,7 +182,6 @@ Performance::Performance(QWidget *parent)
 
 Performance::~Performance()
 {
-    branch_sim_set_enabled(0);
     cache_sim_set_enabled(0);
     mem_access_set_enabled(0);
     delete ui;
@@ -171,7 +193,7 @@ Performance::renderCacheMap()
     const int sets  = cache_sim_sets_get();
     const int assoc = cache_sim_assoc_get();
     if (!sets || !assoc) {
-        ui->cacheMap->setText(QStringLiteral("—"));
+        ui->l1Map->setText(QStringLiteral("—"));
         return;
     }
 
@@ -182,30 +204,24 @@ Performance::renderCacheMap()
     if ((cacheMapImage.width() != sets) || (cacheMapImage.height() != assoc))
         cacheMapImage = QImage(sets, assoc, QImage::Format_RGB32);
 
+    const QRgb empty_col = qRgb(0x55, 0x55, 0x55);
     for (int s = 0; s < sets; s++) {
         for (int w = 0; w < assoc; w++) {
             const uint8_t v = map[s * assoc + w];
-            QRgb col;
-            if (v == 0)
-                col = qRgb(0x22, 0x22, 0x22);
-            else {
-                const double t = (double) (v - 1) / (double) (assoc - 1);
-                col = qRgb((int) (255 * t), (int) (255 * (1.0 - t)), 0);
-            }
-            cacheMapImage.setPixel(s, w, col);
+            cacheMapImage.setPixel(s, w, v ? heatColor((double) (v - 1) / (double) (assoc - 1)) : empty_col);
         }
     }
     delete[] map;
 
-    ui->cacheMap->setPixmap(QPixmap::fromImage(cacheMapImage.scaled(ui->cacheMap->size(),
-                                                                    Qt::KeepAspectRatio,
-                                                                    Qt::FastTransformation)));
+    ui->l1Map->setPixmap(QPixmap::fromImage(cacheMapImage.scaled(ui->l1Map->size(),
+                                                                 Qt::KeepAspectRatio,
+                                                                 Qt::FastTransformation)));
 }
 
 void
 Performance::renderL2Map()
 {
-    const int sets  = cache_sim_l2_active() ? (cache_sim_l2_size_get() / cache_sim_l2_assoc_get() / 32) : 0;
+    const int sets = cache_sim_l2_active() ? (cache_sim_l2_size_get() / cache_sim_l2_assoc_get() / 32) : 0;
     if (!sets) {
         ui->l2Map->setText(QStringLiteral("—"));
         return;
@@ -215,26 +231,20 @@ Performance::renderL2Map()
     cache_sim_l2_set_heat_get(heat);
 
     /* L2 is large (thousands of sets); reflow it into a compact 2D "map".
-       Each cell = one set, coloured by global access recency: 0 = empty (dark),
-       high = recently touched (green .. .. low = long-untouched (red). */
+       Each cell = one set, coloured by global access recency:
+       h=255 -> recently touched (green), h=1 -> long-untouched (red). */
     const int cols = 128;
     const int rows = (sets + cols - 1) / cols;
     if ((l2MapImage.width() != cols) || (l2MapImage.height() != rows))
         l2MapImage = QImage(cols, rows, QImage::Format_RGB32);
 
+    const QRgb empty_col = qRgb(0x55, 0x55, 0x55);
     for (int s = 0; s < sets; s++) {
         const uint8_t h = heat[s];
-        QRgb col;
-        if (h == 0)
-            col = qRgb(0x22, 0x22, 0x22);
-        else {
-            const double t = 1.0 - (double) (h - 1) / 254.0; /* h=255 -> green, h=1 -> red */
-            col = qRgb((int) (255 * t), (int) (255 * (1.0 - t)), 0);
-        }
-        const int x = s % cols;
-        const int y = s / cols;
+        const int     x = s % cols;
+        const int     y = s / cols;
         if (y < rows)
-            l2MapImage.setPixel(x, y, col);
+            l2MapImage.setPixel(x, y, h ? heatColor(1.0 - (double) (h - 1) / 254.0) : empty_col);
     }
     delete[] heat;
 
@@ -244,50 +254,11 @@ Performance::renderL2Map()
 }
 
 void
-Performance::renderBhtMap()
-{
-    const int entries = branch_sim_entries_get();
-    if (entries <= 0) {
-        ui->bhtMap->setText(QStringLiteral("—"));
-        return;
-    }
-
-    uint8_t *map = new uint8_t[(size_t) entries];
-    branch_sim_map_get(map);
-
-    const int cols = 64;
-    const int rows = (entries + cols - 1) / cols;
-    if ((bhtMapImage.width() != cols) || (bhtMapImage.height() != rows))
-        bhtMapImage = QImage(cols, rows, QImage::Format_RGB32);
-
-    static const QRgb state_colors[4] = {
-        qRgb(0x1a, 0x23, 0x7e), /* 00 strong not-taken */
-        qRgb(0x42, 0xa5, 0xf5), /* 01 weakly not-taken */
-        qRgb(0xff, 0xa7, 0x26), /* 10 weakly taken */
-        qRgb(0xe5, 0x39, 0x35), /* 11 strong taken */
-    };
-
-    for (int y = 0; y < rows; y++) {
-        QRgb *line = (QRgb *) bhtMapImage.scanLine(y);
-        for (int x = 0; x < cols; x++) {
-            const int i = y * cols + x;
-            line[x] = (i < entries) ? state_colors[map[i] & 3] : qRgb(0, 0, 0);
-        }
-    }
-
-    delete[] map;
-
-    ui->bhtMap->setPixmap(QPixmap::fromImage(bhtMapImage.scaled(ui->bhtMap->size(),
-                                                                Qt::KeepAspectRatio,
-                                                                Qt::FastTransformation)));
-}
-
-void
 Performance::updateValues()
 {
     char tmp[128];
 
-    /* Keep the access marks current (cache feed + working set). */
+    /* Keep the access marks current (working set). */
     mem_access_ensure_sized();
     mem_access_scan_ptes();
     uint8_t *heat = mem_access_heat_get();
@@ -297,7 +268,7 @@ Performance::updateValues()
             heat[i] = (uint8_t) ((heat[i] * 225u) >> 8);
     }
 
-    /* --- CPU speed gauge + last refresh summary --- */
+    /* --- CPU speed gauge + refresh summary --- */
     const uint64_t guest_ns = cpu_time_guest_ns_get();
     const uint64_t real_ns  = cpu_time_real_ns_get();
 
@@ -320,14 +291,18 @@ Performance::updateValues()
         snprintf(tmp, sizeof(tmp), "%.1f%%", speed);
         ui->cpuGauge->setText(QString::fromLatin1(tmp));
 
-        snprintf(tmp, sizeof(tmp),
-                 "Last refresh: %.1f ms simulated, %.2f ms real time (%.1f%% of simulated time), speed %.1f%%",
-                 (double) window_guest / 1000000.0, (double) window_real / 1000000.0, pct, speed);
-        ui->cpuInfoLabel->setText(QString::fromLatin1(tmp));
+        snprintf(tmp, sizeof(tmp), "%.2f ms", (double) window_guest / 1000000.0);
+        ui->simValue->setText(QString::fromLatin1(tmp));
+        snprintf(tmp, sizeof(tmp), "%.2f ms", (double) window_real / 1000000.0);
+        ui->realValue->setText(QString::fromLatin1(tmp));
+        snprintf(tmp, sizeof(tmp), "%.1f%% of simulated time", pct);
+        ui->pctValue->setText(QString::fromLatin1(tmp));
     } else {
         ui->cpuGauge->setValue(100.0);
         ui->cpuGauge->setText(QStringLiteral("—"));
-        ui->cpuInfoLabel->setText(tr("Last refresh: emulation idle or paused"));
+        ui->simValue->setText(QStringLiteral("—"));
+        ui->realValue->setText(QStringLiteral("—"));
+        ui->pctValue->setText(tr("emulation idle or paused"));
     }
 
     /* --- L1 cache --- */
@@ -336,24 +311,26 @@ Performance::updateValues()
     const int line  = cache_sim_line_get();
 
     if (!size) {
-        ui->geoValue->setText(tr("CPU has no L1 cache"));
-        ui->hitValue->setText(QStringLiteral("—"));
-        ui->hitBar->setValue(0);
-        ui->countsValue->setText(QStringLiteral("—"));
-        ui->wsValue->setText(QStringLiteral("—"));
-        ui->wsL1Value->setText(QStringLiteral("—"));
-        ui->wsBar->setValue(0);
-        ui->cacheMap->setText(QStringLiteral("—"));
+        ui->l1GeoValue->setText(tr("CPU has no L1 cache"));
+        ui->l1HitValue->setText(QStringLiteral("—"));
+        ui->l1HitBar->setValue(0);
+        ui->l1WCountsValue->setText(QStringLiteral("—"));
+        ui->l1TCountsValue->setText(QStringLiteral("—"));
+        ui->l1Map->setText(QStringLiteral("—"));
         ui->l2GeoValue->setText(tr("CPU has no modelled L2"));
         ui->l2HitValue->setText(QStringLiteral("—"));
         ui->l2HitBar->setValue(0);
-        ui->l2CountsValue->setText(QStringLiteral("—"));
+        ui->l2WCountsValue->setText(QStringLiteral("—"));
+        ui->l2TCountsValue->setText(QStringLiteral("—"));
+        ui->l2Map->setText(QStringLiteral("—"));
+        ui->wsValue->setText(QStringLiteral("—"));
+        ui->wsL1Value->setText(QStringLiteral("—"));
+        ui->wsBar->setValue(0);
         ui->ws2Value->setText(QStringLiteral("—"));
         ui->ws2Bar->setValue(0);
-        ui->l2Map->setText(QStringLiteral("—"));
     } else {
         snprintf(tmp, sizeof(tmp), "%d KB, %d-way, %d B line", size / 1024, assoc, line);
-        ui->geoValue->setText(QString::fromLatin1(tmp));
+        ui->l1GeoValue->setText(QString::fromLatin1(tmp));
 
         const uint64_t h  = cache_sim_hits_get();
         const uint64_t m  = cache_sim_misses_get();
@@ -365,16 +342,18 @@ Performance::updateValues()
         if (wh + wm) {
             const double rate = (double) wh / (double) (wh + wm) * 100.0;
             snprintf(tmp, sizeof(tmp), "%.2f%%", rate);
-            ui->hitValue->setText(QString::fromLatin1(tmp));
-            ui->hitBar->setValue((int) rate);
+            ui->l1HitValue->setText(QString::fromLatin1(tmp));
+            ui->l1HitBar->setValue((int) rate);
         } else {
-            ui->hitValue->setText(tr("idle"));
-            ui->hitBar->setValue(0);
+            ui->l1HitValue->setText(tr("idle"));
+            ui->l1HitBar->setValue(0);
         }
-        snprintf(tmp, sizeof(tmp), "%llu / %llu (window),  %llu / %llu (total)",
-                 (unsigned long long) wh, (unsigned long long) wm,
+        snprintf(tmp, sizeof(tmp), "%llu / %llu",
+                 (unsigned long long) wh, (unsigned long long) wm);
+        ui->l1WCountsValue->setText(QString::fromLatin1(tmp));
+        snprintf(tmp, sizeof(tmp), "%llu / %llu",
                  (unsigned long long) h, (unsigned long long) m);
-        ui->countsValue->setText(QString::fromLatin1(tmp));
+        ui->l1TCountsValue->setText(QString::fromLatin1(tmp));
 
         renderCacheMap();
 
@@ -395,8 +374,7 @@ Performance::updateValues()
         ui->wsL1Value->setText(QString::fromLatin1(tmp));
         ui->wsBar->setValue((int) std::min<uint64_t>(100, l1pct));
         ui->wsBar->setStyleSheet(QString::fromLatin1(
-            "QProgressBar { border: 1px solid #555; border-radius: 3px; background: #333; }"
-            "QProgressBar::chunk { background-color: %1; border-radius: 2px; }")
+            "QProgressBar::chunk { background-color: %1; }")
             .arg((l1pct <= 100) ? QStringLiteral("#4CAF50") : QStringLiteral("#E53935")));
 
         /* --- L2 --- */
@@ -404,10 +382,11 @@ Performance::updateValues()
             ui->l2GeoValue->setText(tr("CPU has no modelled L2"));
             ui->l2HitValue->setText(QStringLiteral("—"));
             ui->l2HitBar->setValue(0);
-            ui->l2CountsValue->setText(QStringLiteral("—"));
+            ui->l2WCountsValue->setText(QStringLiteral("—"));
+            ui->l2TCountsValue->setText(QStringLiteral("—"));
+            ui->l2Map->setText(QStringLiteral("—"));
             ui->ws2Value->setText(QStringLiteral("—"));
             ui->ws2Bar->setValue(0);
-            ui->l2Map->setText(QStringLiteral("—"));
         } else {
             const int l2_size  = cache_sim_l2_size_get();
             const int l2_assoc = cache_sim_l2_assoc_get();
@@ -430,10 +409,12 @@ Performance::updateValues()
                 ui->l2HitValue->setText(tr("idle"));
                 ui->l2HitBar->setValue(0);
             }
-            snprintf(tmp, sizeof(tmp), "%llu / %llu (window),  %llu / %llu (total)",
-                     (unsigned long long) wl2h, (unsigned long long) wl2m,
+            snprintf(tmp, sizeof(tmp), "%llu / %llu",
+                     (unsigned long long) wl2h, (unsigned long long) wl2m);
+            ui->l2WCountsValue->setText(QString::fromLatin1(tmp));
+            snprintf(tmp, sizeof(tmp), "%llu / %llu",
                      (unsigned long long) l2h, (unsigned long long) l2m);
-            ui->l2CountsValue->setText(QString::fromLatin1(tmp));
+            ui->l2TCountsValue->setText(QString::fromLatin1(tmp));
 
             renderL2Map();
 
@@ -444,47 +425,8 @@ Performance::updateValues()
             ui->ws2Value->setText(QString::fromLatin1(tmp));
             ui->ws2Bar->setValue((int) std::min<uint64_t>(100, l2pct));
             ui->ws2Bar->setStyleSheet(QString::fromLatin1(
-                "QProgressBar { border: 1px solid #555; border-radius: 3px; background: #333; }"
-                "QProgressBar::chunk { background-color: %1; border-radius: 2px; }")
+                "QProgressBar::chunk { background-color: %1; }")
                 .arg((l2pct <= 100) ? QStringLiteral("#4CAF50") : QStringLiteral("#E53935")));
         }
     }
-
-    /* --- Branch prediction --- */
-    const uint64_t total     = branch_sim_total_get();
-    const uint64_t correct   = branch_sim_correct_get();
-    const uint64_t incorrect = branch_sim_incorrect_get();
-    const uint64_t taken     = branch_sim_taken_get();
-
-    const uint64_t wt = total - last_total;
-    const uint64_t wc = correct - last_correct;
-    const uint64_t wi = incorrect - last_incorrect;
-    last_total         = total;
-    last_correct       = correct;
-    last_incorrect     = incorrect;
-
-    if (wt) {
-        const double acc = (double) wc / (double) wt * 100.0;
-        snprintf(tmp, sizeof(tmp), "%.2f%%", acc);
-        ui->accValue->setText(QString::fromLatin1(tmp));
-        ui->accBar->setValue((int) acc);
-    } else {
-        ui->accValue->setText(tr("idle"));
-        ui->accBar->setValue(0);
-    }
-
-    if (total) {
-        const double tr = (double) taken / (double) total * 100.0;
-        snprintf(tmp, sizeof(tmp), "%.2f%%  (%llu taken / %llu total)",
-                 tr, (unsigned long long) taken, (unsigned long long) total);
-        ui->takenValue->setText(QString::fromLatin1(tmp));
-    } else
-        ui->takenValue->setText(QStringLiteral("—"));
-
-    snprintf(tmp, sizeof(tmp), "%llu / %llu (window),  %llu / %llu (total)",
-             (unsigned long long) wc, (unsigned long long) wi,
-             (unsigned long long) correct, (unsigned long long) incorrect);
-    ui->bcountsValue->setText(QString::fromLatin1(tmp));
-
-    renderBhtMap();
 }

@@ -305,6 +305,10 @@ extern void codegen_block_init(uint32_t phys_addr);
 extern void codegen_block_remove(void);
 extern void codegen_block_start_recompile(codeblock_t *block);
 extern void codegen_block_end_recompile(codeblock_t *block);
+
+/* Pipeline profiler hooks (codegen_block.c). */
+extern void pp_block_start(int nr);
+extern void pp_block_op_inc(int nr, uint8_t op);
 extern void codegen_block_end(void);
 extern void codegen_delete_block(codeblock_t *block);
 extern void codegen_generate_call(uint8_t opcode, OpFn op, uint32_t fetchdat, uint32_t new_pc, uint32_t old_pc);
