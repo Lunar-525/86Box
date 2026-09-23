@@ -42,6 +42,7 @@ add_library(chipset OBJECT
     intel_420ex.c
     intel_4x0.c
     intel_i450kx.c
+    intel_pceb_esc.c
     intel_sio.c
     intel_piix.c
     isa486c.c
@@ -65,11 +66,14 @@ add_library(chipset OBJECT
     scamp.c
     scat.c
     sis_85c310.c
+    sis_85c411.c
     sis_85c4xx.c
     sis_85c496.c
     sis_85c50x.c
     sis_5511.c
     sis_5571.c
+    sis_530.c
+    sis_530_h2p.c
     sis_5581.c
     sis_5591.c
     sis_5600.c
@@ -90,6 +94,7 @@ add_library(chipset OBJECT
     umc_8886.c
     umc_hb4.c
     umc_8890.c
+    ut85c50x.c
     via_apollo.c
     via_pipc.c
     vl82c480.c

@@ -58,7 +58,7 @@ typedef struct dma_t {
     uint8_t  page_l;
     uint8_t  page_h;
     uint8_t  pad;
-    uint16_t cb;
+    uint32_t cb; /* 16 bits, or 24 with the EISA high count */
     uint16_t io_addr;
     uint16_t base;
     uint16_t transfer_mode;
@@ -79,6 +79,7 @@ extern uint8_t dma_e;
 extern uint8_t dma_m;
 
 extern void dma_init(void);
+extern void dma_init_ibm5140(void);
 extern void dma16_init(void);
 extern void ps2_dma_init(void);
 extern void dma_reset(void);
@@ -94,6 +95,7 @@ extern void writedma2(uint8_t temp);
 extern int  dma_get_drq(int channel);
 extern void dma_set_drq(int channel, int set);
 extern void dma_set_eop(int channel, int set);
+extern void dma_set_service_handler(int channel, void (*handler)(void *), void *priv);
 
 extern int dma_channel_read_only(int channel);
 extern int dma_channel_advance(int channel);
@@ -116,6 +118,7 @@ void dma_set_force_xt(int enable);
 
 void dma_ext_mode_init(void);
 void dma_high_page_init(void);
+void dma_eisa_init(void);
 
 void dma_remove_sg(void);
 void dma_set_sg_base(uint8_t sg_base);

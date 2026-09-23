@@ -43,6 +43,7 @@
 
 /* The recording safety margin is intended for uneven "len" calls to the get_buffer mixer calls on sound_sb. */
 #define SB_DSP_REC_SAFEFTY_MARGIN 4096
+#define SB_DSP_REC_MAX_MARGIN (SB_DSP_REC_SAFEFTY_MARGIN * 2)
 
 enum {
     DSP_S_NORMAL = 0,
@@ -517,6 +518,7 @@ sb_dsp_reset(sb_dsp_t *dsp)
     dsp->sb_irq401   = 0;
     dsp->sb_16_pause = 0;
     dsp->sb_read_wp = dsp->sb_read_rp = 0;
+    dsp->sb_read_used                 = 0;
     dsp->sb_data_stat                 = -1;
     dsp->sb_speaker                   = 0;
     dsp->sb_pausetime                 = -1LL;
@@ -525,8 +527,28 @@ sb_dsp_reset(sb_dsp_t *dsp)
 
     dsp->sbreset = 0;
 
-    dsp->record_pos_read  = 0;
-    dsp->record_pos_write = SB_DSP_REC_SAFEFTY_MARGIN;
+    dsp->record_pos_read      = 0;
+    dsp->record_pos_write     = SB_DSP_REC_SAFEFTY_MARGIN;
+    dsp->record_pos_write_mic = SB_DSP_REC_SAFEFTY_MARGIN;
+    dsp->record_phase_mic     = 0;
+    dsp->record_denom_mic     = 0;
+
+    /* zero filter vals on first buffer after a reset */
+    dsp->record_rate_mic       = 0;
+    dsp->record_prev_l_mic     = 0;
+    dsp->record_prev_r_mic     = 0;
+    dsp->record_prev_valid_mic = 0;
+
+    dsp->record_aa_active_mic = 0;
+    dsp->record_aa_b0_mic     = 0.0;
+    dsp->record_aa_b1_mic     = 0.0;
+    dsp->record_aa_b2_mic     = 0.0;
+    dsp->record_aa_a1_mic     = 0.0;
+    dsp->record_aa_a2_mic     = 0.0;
+    dsp->record_aa_z1_mic[0]  = 0.0;
+    dsp->record_aa_z1_mic[1]  = 0.0;
+    dsp->record_aa_z2_mic[0]  = 0.0;
+    dsp->record_aa_z2_mic[1]  = 0.0;
 
     dsp->irq_update(dsp->irq_priv, 0);
 
@@ -579,6 +601,7 @@ sb_add_data(sb_dsp_t *dsp, uint8_t v)
 {
     dsp->sb_read_data[dsp->sb_read_wp++] = v;
     dsp->sb_read_wp &= 0xff;
+    dsp->sb_read_used++;
 }
 
 static unsigned int
@@ -2209,10 +2232,12 @@ sb_do_reset(sb_dsp_t *dsp, const uint8_t v)
     if (((v & 1) != 0) && (dsp->state != DSP_S_RESET)) {
         sb_dsp_reset(dsp);
         dsp->sb_read_rp = dsp->sb_read_wp = 0;
+        dsp->sb_read_used = 0;
         dsp->state = DSP_S_RESET;
     } else if (((v & 1) == 0) && (dsp->state == DSP_S_RESET)) {
         dsp->state = DSP_S_RESET_WAIT;
         dsp->sb_read_rp = dsp->sb_read_wp = 0;
+        dsp->sb_read_used = 0;
         sb_add_data(dsp, 0xaa);
     }
 }
@@ -2359,6 +2384,8 @@ sb_read(uint16_t addr, void *priv)
                     dsp->sbreaddat = dsp->sb_read_data[dsp->sb_read_rp];
                     dsp->sb_read_rp++;
                     dsp->sb_read_rp &= 0xff;
+                    if (dsp->sb_read_used > 0)
+                        dsp->sb_read_used--;
                 }
                 ret = dsp->sbreaddat;
             }
@@ -2459,6 +2486,14 @@ sb_read(uint16_t addr, void *priv)
     sb_dsp_log("[%04X:%08X] DSP: [R] %04X = %02X\n", CS, cpu_state.pc, addr, ret);
 
     return ret;
+}
+
+int
+sb_dsp_input_remain(void *priv)
+{
+    sb_dsp_t *dsp = (sb_dsp_t *) priv;
+
+    return (256 - dsp->sb_read_used);
 }
 
 void
@@ -3180,6 +3215,19 @@ pollsb(void *priv)
     }
 }
 
+static void
+sb_dsp_record_resync(sb_dsp_t *dsp)
+{
+    int pos = (dsp->record_pos_write_mic - SB_DSP_REC_SAFEFTY_MARGIN) & 0xFFFF;
+
+    dsp->record_pos_read = pos;
+
+    for (int i = 0; i < SB_DSP_REC_SAFEFTY_MARGIN; i++) {
+        dsp->record_buffer[pos] = 0;
+        pos                     = (pos + 1) & 0xFFFF;
+    }
+}
+
 void
 sb_poll_i(void *priv)
 {
@@ -3187,6 +3235,14 @@ sb_poll_i(void *priv)
     int       processed = 0;
 
     timer_advance_u64(&dsp->input_timer, (uint64_t) dsp->sblatchi);
+
+    if ((dsp->sb_8_enable && !dsp->sb_8_pause && (dsp->sb_pausetime < 0LL) && !dsp->sb_8_output)
+        || (dsp->sb_16_enable && !dsp->sb_16_pause && (dsp->sb_pausetime < 0LL) && !dsp->sb_16_output)) {
+        const int diff = (int) (int16_t) (dsp->record_pos_write_mic - dsp->record_pos_read);
+
+        if ((diff <= 0) || (diff > SB_DSP_REC_MAX_MARGIN))
+            sb_dsp_record_resync(dsp);
+    }
 
     if (dsp->sb_8_enable && !dsp->sb_8_pause && dsp->sb_pausetime < 0 && !dsp->sb_8_output) {
         switch (dsp->sb_8_format) {

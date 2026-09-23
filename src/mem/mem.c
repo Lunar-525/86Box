@@ -71,6 +71,15 @@ uint32_t pages_sz;    /* #pages in table */
 uint8_t *ram;  /* the virtual RAM */
 uint8_t  page_ff[4096];
 uint32_t rammask;
+
+/* IN530 INIT reset path. */
+static int mem_a20_reset_vector_bypass = 0;
+
+void
+mem_a20_reset_vector_bypass_once(void)
+{
+    mem_a20_reset_vector_bypass = 1;
+}
 uint32_t addr_space_size;
 
 uint8_t *rom; /* the virtual ROM */
@@ -1199,7 +1208,6 @@ addreadlookup(uint32_t virt, uint32_t phys)
     int *    rln          = &(readlnext[is_compare]);
     int      cur_rln      = *rln | (int) small_offset;
 
-#ifndef USE_DEBUG_REGS_486
     if (virt == 0xffffffff)
         return;
 
@@ -1212,8 +1220,7 @@ addreadlookup(uint32_t virt, uint32_t phys)
     readlookup2[index] = (uintptr_t) &ram[(uintptr_t) (phys & ~0xFFF) - (uintptr_t) (virt & ~0xfff)];
 
     readlookup[cur_rln] = virt >> 12;
-    *rln = (*rln + 1) & (cachesize - 1);
-#endif
+    *rln                = (*rln + 1) & (cachesize - 1);
 
     cycles -= 9;
 }
@@ -1221,7 +1228,6 @@ addreadlookup(uint32_t virt, uint32_t phys)
 void
 addwritelookup(uint32_t virt, uint32_t phys)
 {
-#ifndef USE_DEBUG_REGS_486
     if (virt == 0xffffffff)
         return;
 
@@ -1258,7 +1264,6 @@ addwritelookup(uint32_t virt, uint32_t phys)
 
     writelookup[writelnext++] = virt >> 12;
     writelnext &= (cachesize - 1);
-#endif
 
     cycles -= 9;
 }
@@ -1278,7 +1283,11 @@ getpccache(uint32_t a)
         if (a64 == 0xffffffffffffffffULL)
             return ram;
     }
-    a64 &= rammask;
+    if (mem_a20_reset_vector_bypass &&
+        ((a & 0xfffff000U) == 0xfffff000U))
+        mem_a20_reset_vector_bypass = 0;
+    else
+        a64 &= rammask;
 
     if (_mem_exec[a64 >> MEM_GRANULARITY_BITS]) {
         if (is286) {
@@ -1583,9 +1592,13 @@ writememwl(uint32_t addr, uint16_t val)
         if ((addr & 0xfff) > 0xffe) {
             if (cr0 >> 31) {
                 for (uint8_t i = 0; i < 2; i++) {
-                    /* Do not translate a page that has a valid lookup, as that is by definition valid
-                       and the whole purpose of the lookup is to avoid repeat identical translations. */
-                    if (!page_lookup[(addr + i) >> 12] || !page_lookup[(addr + i) >> 12]->write_b) {
+                    /* A page with a valid lookup is already translated: take its physical
+                       address from the lookup, since writing the first half can recycle
+                       the entry and the second half then falls back to addr64a[]. */
+                    if (page_lookup[(addr + i) >> 12] && page_lookup[(addr + i) >> 12]->write_b) {
+                        a          = ((uint64_t) (page_lookup[(addr + i) >> 12] - pages) << 12) | ((addr + i) & 0xfff);
+                        addr64a[i] = (uint32_t) a;
+                    } else {
                         a          = mmutranslate_write(addr + i);
                         addr64a[i] = (uint32_t) a;
 
@@ -1845,9 +1858,13 @@ writememll(uint32_t addr, uint32_t val)
         if ((addr & 0xfff) > 0xffc) {
             if (cr0 >> 31) {
                 for (i = 0; i < 4; i++) {
-                    /* Do not translate a page that has a valid lookup, as that is by definition valid
-                       and the whole purpose of the lookup is to avoid repeat identical translations. */
-                    if (!page_lookup[(addr + i) >> 12] || !page_lookup[(addr + i) >> 12]->write_b) {
+                    /* A page with a valid lookup is already translated: take its physical
+                       address from the lookup, since writing the first part can recycle
+                       the entry and the rest then falls back to addr64a[]. */
+                    if (page_lookup[(addr + i) >> 12] && page_lookup[(addr + i) >> 12]->write_b) {
+                        a          = ((uint64_t) (page_lookup[(addr + i) >> 12] - pages) << 12) | ((addr + i) & 0xfff);
+                        addr64a[i] = (uint32_t) a;
+                    } else {
                         if (i == 0) {
                             a          = mmutranslate_write(addr + i);
                             addr64a[i] = (uint32_t) a;
@@ -2142,9 +2159,13 @@ writememql(uint32_t addr, uint64_t val)
         if ((addr & 0xfff) > 0xff8) {
             if (cr0 >> 31) {
                 for (i = 0; i < 8; i++) {
-                    /* Do not translate a page that has a valid lookup, as that is by definition valid
-                       and the whole purpose of the lookup is to avoid repeat identical translations. */
-                    if (!page_lookup[(addr + i) >> 12] || !page_lookup[(addr + i) >> 12]->write_b) {
+                    /* A page with a valid lookup is already translated: take its physical
+                       address from the lookup, since writing the first part can recycle
+                       the entry and the rest then falls back to addr64a[]. */
+                    if (page_lookup[(addr + i) >> 12] && page_lookup[(addr + i) >> 12]->write_b) {
+                        a          = ((uint64_t) (page_lookup[(addr + i) >> 12] - pages) << 12) | ((addr + i) & 0xfff);
+                        addr64a[i] = (uint32_t) a;
+                    } else {
                         if (i == 0) {
                             a          = mmutranslate_write(addr + i);
                             addr64a[i] = (uint32_t) a;
@@ -2892,6 +2913,28 @@ mem_mapping_access_allowed(uint32_t flags, uint16_t access)
     return ret;
 }
 
+/* One granule of one mapping, put where an access of each kind will find it. */
+static void
+mem_mapping_apply_granule(mem_mapping_t *map, uint64_t c, int n)
+{
+    uint8_t wp = _mem_wp[c >> MEM_GRANULARITY_BITS];
+
+    if (map->exec && mem_mapping_access_allowed(map->flags, _mem_state[c >> MEM_GRANULARITY_BITS].states[n].x))
+        _mem_exec[c >> MEM_GRANULARITY_BITS] = map->exec + (c - map->base);
+    if (!wp && (map->write_b || map->write_w || map->write_l) && mem_mapping_access_allowed(map->flags, _mem_state[c >> MEM_GRANULARITY_BITS].states[n].w))
+        write_mapping[c >> MEM_GRANULARITY_BITS] = map;
+    if ((map->read_b || map->read_w || map->read_l) && mem_mapping_access_allowed(map->flags, _mem_state[c >> MEM_GRANULARITY_BITS].states[n].r))
+        read_mapping[c >> MEM_GRANULARITY_BITS] = map;
+
+    n |= STATE_BUS;
+    wp = _mem_wp_bus[c >> MEM_GRANULARITY_BITS];
+
+    if (!wp && (map->write_b || map->write_w || map->write_l) && mem_mapping_access_allowed(map->flags, _mem_state[c >> MEM_GRANULARITY_BITS].states[n].w))
+        write_mapping_bus[c >> MEM_GRANULARITY_BITS] = map;
+    if ((map->read_b || map->read_w || map->read_l) && mem_mapping_access_allowed(map->flags, _mem_state[c >> MEM_GRANULARITY_BITS].states[n].r))
+        read_mapping_bus[c >> MEM_GRANULARITY_BITS] = map;
+}
+
 void
 mem_mapping_recalc(uint64_t base, uint64_t size, uint32_t base_ignore)
 {
@@ -3013,6 +3056,32 @@ mem_mapping_recalc(uint64_t base, uint64_t size, uint32_t base_ignore)
             }
         }
         map = map->next;
+    }
+
+    /* THE ALIASES OF THE RANGE WERE CLEARED ABOVE, and the walk put back only
+       what aliases with it. Whatever else lives under an alias -- the
+       machine's RAM sixteen megabytes above an ISA adapter's linear
+       aperture, say -- was cleared and never restored, and that memory
+       vanished the moment the adapter's aperture was switched on. Put back
+       every mapping that does not itself alias, wherever an alias of the
+       range crosses it. */
+    if (o_e != 0x00000000ULL) {
+        for (o_c = o_a; o_c <= o_e; o_c += o_a) {
+            uint64_t a_base = base + o_c;
+            uint64_t a_end  = base + size + o_c;
+
+            for (map = base_mapping; map != NULL; map = map->next) {
+                if (!map->enable || (base_ignore & map->base_ignore))
+                    continue;
+                uint64_t m_base = (uint64_t) map->base;
+                uint64_t m_end  = (uint64_t) map->base + (uint64_t) map->size;
+                uint64_t start  = (m_base > a_base) ? m_base : a_base;
+                uint64_t end    = (m_end < a_end) ? m_end : a_end;
+
+                for (c = start; c < end; c += MEM_GRANULARITY_SIZE)
+                    mem_mapping_apply_granule(map, c, !!in_smm);
+            }
+        }
     }
 
     flushmmucache_nopc();
