@@ -77,6 +77,10 @@ extern "C" {
 
 #include "qt_defs.hpp"
 #include "qt_mainwindow.hpp"
+#include "qt_mcp_perf.hpp"
+#include "qt_mcp_keyboard.hpp"
+#include "qt_mcp_media.hpp"
+#include "qt_mcp_screen.hpp"
 #include "qt_preferences.hpp"
 #include "qt_settings.hpp"
 #include "cocoa_mouse.hpp"
@@ -884,6 +888,112 @@ main(int argc, char *argv[])
         QObject::connect(main_window, &MainWindow::vmmRunningStateChanged, &manager_socket, &VMManagerClientSocket::clientRunningStateChanged);
         QObject::connect(main_window, &MainWindow::vmmConfigurationChanged, &manager_socket, &VMManagerClientSocket::configurationChanged);
         QObject::connect(main_window, &MainWindow::vmmGlobalConfigurationChanged, &manager_socket, &VMManagerClientSocket::globalConfigurationChanged);
+
+        /* The manager exposes the Performance window's numbers through its MCP
+           server, so a sample is taken here, where the counters live, and sent
+           back over the same socket. */
+        QObject::connect(&manager_socket, &VMManagerClientSocket::performanceRequested,
+                         &manager_socket, [&manager_socket](quint64 request_id) {
+                             McpPerf::sample(&manager_socket, MCP_PERF_SAMPLE_WINDOW_MS,
+                                             [&manager_socket, request_id](const QJsonObject &stats) {
+                                                 manager_socket.sendPerformanceStats(request_id, stats);
+                                             });
+                         });
+
+        /* Loading and ejecting media has to happen here too: the drives, and
+           the media menu that owns them, belong to this process. */
+        QObject::connect(&manager_socket, &VMManagerClientSocket::mediaActionRequested,
+                         &manager_socket, [&manager_socket](quint64 request_id, const QJsonObject &request) {
+                             const QString action = request.value("action").toString();
+                             const QString drive  = request.value("drive").toString();
+
+                             QJsonObject result;
+                             result["action"] = action;
+                             result["drive"]  = drive;
+
+                             /* "state" asks what the machine really has, and needs no drive. */
+                             if (action == QStringLiteral("state")) {
+                                 result["drives"] = McpMedia::drivesState();
+                                 manager_socket.sendMediaActionResult(request_id, result);
+                                 return;
+                             }
+
+                             McpMedia::Target target;
+                             QString          error;
+
+                             if (!McpMedia::parseTarget(drive, target, error)) {
+                                 result["error"] = error;
+                                 manager_socket.sendMediaActionResult(request_id, result);
+                                 return;
+                             }
+
+                             QJsonObject state;
+                             bool        ok = false;
+
+                             if (action == QStringLiteral("load")) {
+                                 ok = McpMedia::load(target,
+                                                     request.value("path").toString(),
+                                                     request.value("write_protected").toBool(false),
+                                                     state, error);
+                             } else if (action == QStringLiteral("eject")) {
+                                 ok = McpMedia::eject(target, state, error);
+                             } else {
+                                 error = QStringLiteral("Unknown media action \"%1\".").arg(action);
+                             }
+
+                             if (ok)
+                                 result["media"] = state;
+                             else
+                                 result["error"] = error;
+
+                             manager_socket.sendMediaActionResult(request_id, result);
+                         });
+
+        /* Typing happens here as well: the emulated keyboard lives in this
+           process, and the keystrokes are spread over time so that a slow
+           guest does not lose any. */
+        QObject::connect(&manager_socket, &VMManagerClientSocket::keyInputRequested,
+                         &manager_socket, [&manager_socket](quint64 request_id, const QJsonObject &request) {
+                             QVector<McpKeyboard::Stroke> strokes;
+                             int                          delay_ms = McpKeyboard::DEFAULT_DELAY_MS;
+                             QString                      error;
+
+                             if (!McpKeyboard::build(request, strokes, delay_ms, error)) {
+                                 QJsonObject result;
+                                 result["error"] = error;
+                                 manager_socket.sendKeyInputResult(request_id, result);
+                                 return;
+                             }
+
+                             McpKeyboard::play(&manager_socket, strokes, delay_ms,
+                                               [&manager_socket, request_id](int keystrokes, int duration_ms) {
+                                                   QJsonObject result;
+                                                   result["keystrokes"]  = keystrokes;
+                                                   result["duration_ms"] = duration_ms;
+                                                   manager_socket.sendKeyInputResult(request_id, result);
+                                               });
+                         });
+
+        /* Screenshots work the same way: the frame lives here, so it is
+           captured here and handed to the manager as a PNG. */
+        QObject::connect(&manager_socket, &VMManagerClientSocket::screenshotRequested,
+                         &manager_socket, [&manager_socket](quint64 request_id, int monitor) {
+                             const auto capture = McpScreen::capture(monitor);
+
+                             QJsonObject screenshot;
+                             screenshot["monitor"] = monitor + 1;
+                             if (!capture.error.isEmpty()) {
+                                 screenshot["error"] = capture.error;
+                             } else {
+                                 screenshot["format"] = QStringLiteral("png");
+                                 screenshot["width"]  = capture.width;
+                                 screenshot["height"] = capture.height;
+                                 screenshot["bytes"]  = capture.png.size();
+                                 screenshot["data"]   = QString::fromLatin1(capture.png.toBase64());
+                             }
+                             manager_socket.sendScreenshot(request_id, screenshot);
+                         });
+
         main_window->installEventFilter(&manager_socket);
 
         manager_socket.sendWinIdMessage(main_window->winId());

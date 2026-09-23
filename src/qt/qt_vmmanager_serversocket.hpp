@@ -60,6 +60,8 @@ public:
     void        serverConnectionReceived();
     void        serverReceivedMessage();
     void        serverSendMessage(VMManagerProtocol::ManagerMessage protocol_message, const QStringList &arguments = QStringList()) const;
+    // Sends a message carrying a JSON payload (used by requests that need parameters)
+    void        serverSendMessageWithObject(VMManagerProtocol::ManagerMessage protocol_message, const QJsonObject &params) const;
     static void serverDisconnected();
     void        jsonReceived(const QJsonObject &json);
     QString     getSocketPath() const;
@@ -75,6 +77,10 @@ signals:
     void configurationChanged();
     void globalConfigurationChanged();
     void winIdReceived(WId id);
+    void performanceStatsReceived(quint64 request_id, const QJsonObject &stats);
+    void screenshotReceived(quint64 request_id, const QJsonObject &screenshot);
+    void keyInputResultReceived(quint64 request_id, const QJsonObject &result);
+    void mediaActionResultReceived(quint64 request_id, const QJsonObject &result);
 };
 
 #endif // QT_VMMANAGER_SERVERSOCKET_H

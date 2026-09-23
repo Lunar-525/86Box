@@ -41,6 +41,10 @@ public:
         RequestShutdown,
         ForceShutdown,
         GlobalConfigurationChanged,
+        RequestPerformance,
+        RequestScreenshot,
+        RequestKeyInput,
+        RequestMediaAction,
         UnknownMessage,
     };
 
@@ -55,6 +59,10 @@ public:
         ConfigurationChanged,
         WinIdMessage,
         GlobalConfigurationChanged,
+        PerformanceStats,
+        ScreenshotData,
+        KeyInputResult,
+        MediaActionResult,
         UnknownMessage,
     };
     Q_ENUM(ClientMessage);

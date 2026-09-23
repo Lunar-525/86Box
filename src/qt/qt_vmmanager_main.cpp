@@ -830,6 +830,20 @@ VMManagerMain::getSearchCompletionList() const
     return allStrings;
 }
 
+QVector<VMManagerSystem *>
+VMManagerMain::machineList() const
+{
+    QVector<VMManagerSystem *> machines;
+    if (vm_model == nullptr)
+        return machines;
+
+    for (int row = 0; row < vm_model->rowCount(QModelIndex()); ++row) {
+        if (auto *system = vm_model->getConfigObjectForIndex(vm_model->index(row, 0)); system != nullptr)
+            machines.append(system);
+    }
+    return machines;
+}
+
 QString
 VMManagerMain::machineCountString(QString states) const
 {

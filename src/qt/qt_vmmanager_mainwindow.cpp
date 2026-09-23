@@ -21,10 +21,13 @@
 #    include "qt_updatecheckdialog.hpp"
 #endif
 #include "qt_about.hpp"
+#include "qt_mcp_server.hpp"
+#include "qt_mcp_tools.hpp"
 #include "qt_preferences.hpp"
 #include "qt_util.hpp"
 
 #include <QCloseEvent>
+#include <QMessageBox>
 #include <QDesktopServices>
 
 extern "C" {
@@ -95,6 +98,11 @@ VMManagerMainWindow::
     ui->statusbar->addPermanentWidget(statusRight, 1);
     connect(vmm, &VMManagerMain::updateStatusLeft, this, &VMManagerMainWindow::setStatusLeft);
     connect(vmm, &VMManagerMain::updateStatusRight, this, &VMManagerMainWindow::setStatusRight);
+
+    // MCP server: exposes the machine list, the machine configurations and the
+    // performance statistics of running machines to MCP clients. Configured by
+    // "mcp_enabled" and "mcp_port" in the preferences dialog.
+    applyMcpSettings(false);
 
     // Inform the main view when preferences are updated
     connect(this, &VMManagerMainWindow::preferencesUpdated, vmm, &VMManagerMain::onPreferencesUpdated);
@@ -204,7 +212,7 @@ VMManagerMainWindow::preferencesTriggered()
 {
     bool machinesRunning = (vmm->getActiveMachineCount() > 0);
     auto old_vmm_path = QString(vmm_path_cfg);
-    const auto prefs = new VMManagerPreferences(this, machinesRunning);
+    const auto prefs = new VMManagerPreferences(this, machinesRunning, mcp_server);
     if (prefs->exec() == QDialog::Accepted) {
         emit preferencesUpdated();
         updateLanguage();
@@ -215,6 +223,49 @@ VMManagerMainWindow::preferencesTriggered()
             strncpy(vmm_path, vmm_path_cfg, sizeof(vmm_path));
             vmm->reload();
         }
+
+        /* Restart the MCP server with whatever the dialog was left with. */
+        applyMcpSettings(true);
+    }
+}
+
+void
+VMManagerMainWindow::applyMcpSettings(bool interactive)
+{
+    const auto config  = new VMManagerConfig(VMManagerConfig::ConfigType::General);
+    const bool enabled = config->getStringValue(QStringLiteral("mcp_enabled")) != QStringLiteral("0");
+    const int  port    = config->getStringValue(QStringLiteral("mcp_port")).toInt();
+    delete config;
+
+    /* Whatever was running is stale now. */
+    if (mcp_server != nullptr) {
+        mcp_server->stop();
+        delete mcp_server;
+        mcp_server = nullptr;
+    }
+    if (mcp_tools != nullptr) {
+        delete mcp_tools;
+        mcp_tools = nullptr;
+    }
+
+    if (!enabled) {
+        qInfo("MCP: server disabled in the preferences");
+        return;
+    }
+
+    mcp_server = new McpServer(this);
+    mcp_tools  = new McpTools86Box(vmm, this);
+    mcp_tools->registerTools(*mcp_server);
+
+    const auto listen_port = ((port >= MCP_MIN_PORT) && (port <= 65535))
+                                 ? static_cast<quint16>(port)
+                                 : MCP_DEFAULT_PORT;
+
+    if (!mcp_server->start(listen_port) && interactive) {
+        QMessageBox::warning(this, tr("MCP server"),
+                             tr("The MCP server could not listen on port %1.\n%2")
+                                 .arg(listen_port)
+                                 .arg(mcp_server->lastError()));
     }
 }
 

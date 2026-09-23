@@ -79,6 +79,8 @@ public slots:
 #else
     QStringList getSearchCompletionList() const;
 #endif
+    // The machines currently known to the model, in list order
+    [[nodiscard]] QVector<VMManagerSystem *> machineList() const;
     void modelDataChange();
     void onPreferencesUpdated();
     void onLanguageUpdated();

@@ -151,6 +151,135 @@
     </widget>
    </item>
    <item>
+    <spacer name="verticalSpacerMcp">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Fixed</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxMcpServer">
+     <property name="title">
+      <string>MCP Server</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutMcp">
+      <item>
+       <widget class="QCheckBox" name="mcpEnabledCheckBox">
+        <property name="text">
+         <string>Enable MCP server for AI agents</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutMcp">
+        <item>
+         <widget class="QLabel" name="labelMcpPort">
+          <property name="text">
+           <string>Port:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="mcpPortSpinBox">
+          <property name="minimum">
+           <number>1024</number>
+          </property>
+          <property name="maximum">
+           <number>65535</number>
+          </property>
+          <property name="value">
+           <number>8674</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerMcp">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QLabel" name="mcpStatusLabel">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutMcpJson">
+        <item>
+         <widget class="QLabel" name="labelMcpJson">
+          <property name="text">
+           <string>Client configuration (JSON):</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerMcpJson">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="mcpCopyButton">
+          <property name="text">
+           <string>Copy</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="mcpConfigJson">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>106</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>106</height>
+         </size>
+        </property>
+        <property name="lineWrapMode">
+         <enum>QPlainTextEdit::NoWrap</enum>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="groupBoxColorScheme">
      <property name="title">
       <string>Color scheme</string>
@@ -214,6 +343,9 @@
   <tabstop>updateCheckBox</tabstop>
   <tabstop>regexSearchCheckBox</tabstop>
   <tabstop>deleteToTrashCheckBox</tabstop>
+  <tabstop>mcpEnabledCheckBox</tabstop>
+  <tabstop>mcpPortSpinBox</tabstop>
+  <tabstop>mcpCopyButton</tabstop>
   <tabstop>radioButtonSystem</tabstop>
   <tabstop>radioButtonLight</tabstop>
   <tabstop>radioButtonDark</tabstop>

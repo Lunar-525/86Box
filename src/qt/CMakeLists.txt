@@ -124,6 +124,20 @@ add_library(ui STATIC
     qt_mainwindow.ui
     qt_machinestatus.cpp
     qt_machinestatus.hpp
+    qt_mcp_server.cpp
+    qt_mcp_server.hpp
+    qt_mcp_tools.cpp
+    qt_mcp_tools.hpp
+    qt_mcp_perf.cpp
+    qt_mcp_perf.hpp
+    qt_mcp_screen.cpp
+    qt_mcp_screen.hpp
+    qt_mcp_ocr.cpp
+    qt_mcp_ocr.hpp
+    qt_mcp_keyboard.cpp
+    qt_mcp_keyboard.hpp
+    qt_mcp_media.cpp
+    qt_mcp_media.hpp
     qt_mediamenu.cpp
     qt_mediamenu.hpp
     qt_rendererstack.cpp
@@ -448,6 +462,11 @@ endif()
 
 if (APPLE)
     target_sources(ui PRIVATE macos_event_filter.mm)
+    # Text recognition for the MCP server. Vision is weak-linked so that builds
+    # still start on system versions that predate it.
+    target_sources(ui PRIVATE qt_mcp_ocr_vision.mm)
+    set_source_files_properties(qt_mcp_ocr_vision.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(ui PRIVATE "-weak_framework Vision")
     if(MOLTENVK)
         find_path(MOLTENVK_INCLUDE "vulkan/vulkan.h" PATHS "/opt/homebrew/opt/molten-vk/libexec/include" "/usr/local/opt/molten-vk/libexec/include" ${MOLTENVK_INCLUDE_DIR})
         if (NOT MOLTENVK_INCLUDE)

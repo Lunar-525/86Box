@@ -12,10 +12,15 @@
  *
  *          Copyright 2024 cold-brewed
  */
+#include <QApplication>
+#include <QClipboard>
 #include <QFileDialog>
+#include <QFontDatabase>
 #include <QStyle>
+#include <QTimer>
 #include <cstring>
 
+#include "qt_mcp_server.hpp"
 #include "qt_preferences.hpp"
 #include "qt_vmmanager_preferences.hpp"
 #include "qt_vmmanager_config.hpp"
@@ -33,8 +38,23 @@ extern "C" {
 #include <86box/version.h>
 }
 
+/* The snippet MCP clients expect: a server name mapped to the endpoint URL.
+   It is generated rather than stored so it always matches the port above. */
+static QString
+mcpClientConfig(int port)
+{
+    return QStringLiteral("{\n"
+                          "  \"mcpServers\": {\n"
+                          "    \"86box\": {\n"
+                          "      \"url\": \"http://127.0.0.1:%1/mcp\"\n"
+                          "    }\n"
+                          "  }\n"
+                          "}\n")
+        .arg(port);
+}
+
 VMManagerPreferences::
-    VMManagerPreferences(QWidget *parent, bool machinesRunning)
+    VMManagerPreferences(QWidget *parent, bool machinesRunning, McpServer *mcp_server)
     : ui(new Ui::VMManagerPreferences)
 {
     ui->setupUi(this);
@@ -91,6 +111,31 @@ VMManagerPreferences::
 #ifndef Q_OS_WINDOWS
     ui->groupBoxColorScheme->setHidden(true);
 #endif
+
+    /* MCP server: off unless configured otherwise, since it hands the machine
+       list to whatever program can reach the port. */
+    ui->mcpEnabledCheckBox->setChecked(config->getStringValue("mcp_enabled") != QStringLiteral("0"));
+    const int mcp_port = config->getStringValue("mcp_port").toInt();
+    ui->mcpPortSpinBox->setValue(((mcp_port >= MCP_MIN_PORT) && (mcp_port <= 65535)) ? mcp_port : MCP_DEFAULT_PORT);
+
+    const auto updateMcpControls = [this]() {
+        const auto enabled = ui->mcpEnabledCheckBox->isChecked();
+        ui->labelMcpPort->setEnabled(enabled);
+        ui->mcpPortSpinBox->setEnabled(enabled);
+        ui->mcpConfigJson->setPlainText(mcpClientConfig(ui->mcpPortSpinBox->value()));
+    };
+    connect(ui->mcpEnabledCheckBox, &QCheckBox::toggled, this, updateMcpControls);
+    connect(ui->mcpPortSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, updateMcpControls);
+
+    ui->mcpConfigJson->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    connect(ui->mcpCopyButton, &QPushButton::clicked, this, &VMManagerPreferences::copyMcpConfig);
+
+    if ((mcp_server != nullptr) && mcp_server->isRunning())
+        ui->mcpStatusLabel->setText(tr("Listening on %1").arg(mcp_server->url()));
+    else
+        ui->mcpStatusLabel->setText(tr("Not running"));
+
+    updateMcpControls();
 }
 
 VMManagerPreferences::~VMManagerPreferences()
@@ -124,6 +169,18 @@ VMManagerPreferences::on_pushButtonLanguage_released()
 }
 
 void
+VMManagerPreferences::copyMcpConfig()
+{
+    QApplication::clipboard()->setText(ui->mcpConfigJson->toPlainText());
+
+    /* Confirm the copy without stealing any space in the dialog. */
+    ui->mcpCopyButton->setText(tr("Copied!"));
+    QTimer::singleShot(1500, this, [this] {
+        ui->mcpCopyButton->setText(tr("Copy"));
+    });
+}
+
+void
 VMManagerPreferences::accept()
 {
     const auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
@@ -141,6 +198,14 @@ VMManagerPreferences::accept()
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     config->setStringValue("delete_to_trash", ui->deleteToTrashCheckBox->isChecked() ? "1" : "0");
 #endif
+    config->setStringValue("mcp_enabled", ui->mcpEnabledCheckBox->isChecked() ? "1" : "0");
+    config->setStringValue("mcp_port", QString::number(ui->mcpPortSpinBox->value()));
+
+    /* Write the settings out now: the server is reconfigured as soon as this
+       dialog is accepted, and it reads them back from this file. */
+    config->sync();
+    delete config;
+
     QDialog::accept();
 }
 

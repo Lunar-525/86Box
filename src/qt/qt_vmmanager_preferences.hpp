@@ -23,10 +23,13 @@ class VMManagerPreferences;
 }
 QT_END_NAMESPACE
 
+class McpServer;
+
 class VMManagerPreferences final : public QDialog {
     Q_OBJECT
 public:
-    explicit VMManagerPreferences(QWidget *parent = nullptr, bool machinesRunning = false);
+    explicit VMManagerPreferences(QWidget *parent = nullptr, bool machinesRunning = false,
+                                  McpServer *mcp_server = nullptr);
     ~VMManagerPreferences() override;
 
 private:
@@ -34,6 +37,7 @@ private:
     QString                   settingsFile;
 private slots:
     void chooseDirectoryLocation();
+    void copyMcpConfig();
     void on_pushButtonDefaultSystemDir_released();
     void on_pushButtonLanguage_released();
 

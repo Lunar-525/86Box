@@ -111,6 +111,24 @@ VMManagerSystem::VMManagerSystem(const QString &sysconfig_file)
     socket_server_type = VMManagerServerSocket::ServerType::Standard;
     socket_server      = new VMManagerServerSocket(config_file, socket_server_type);
 
+    // The emulator answers performance and screenshot requests through the same socket
+    connect(socket_server, &VMManagerServerSocket::performanceStatsReceived,
+            this, [this](quint64 request_id, const QJsonObject &stats) {
+                emit performanceStatsReceived(request_id, stats);
+            });
+    connect(socket_server, &VMManagerServerSocket::screenshotReceived,
+            this, [this](quint64 request_id, const QJsonObject &screenshot) {
+                emit screenshotReceived(request_id, screenshot);
+            });
+    connect(socket_server, &VMManagerServerSocket::keyInputResultReceived,
+            this, [this](quint64 request_id, const QJsonObject &result) {
+                emit keyInputResultReceived(request_id, result);
+            });
+    connect(socket_server, &VMManagerServerSocket::mediaActionResultReceived,
+            this, [this](quint64 request_id, const QJsonObject &result) {
+                emit mediaActionResultReceived(request_id, result);
+            });
+
     // NOTE: When unique names or UUIDs are written to the individual VM config file, use that
     // here instead of the auto-generated unique_name
     // Save settings once everything is initialized
@@ -374,6 +392,12 @@ bool
 VMManagerSystem::isProcessRunning() const
 {
     return process->processId() != 0;
+}
+
+bool
+VMManagerSystem::canLaunch()
+{
+    return has86BoxBinary();
 }
 
 qint64
@@ -1181,6 +1205,68 @@ void
 VMManagerSystem::sendGlobalConfigurationChanged()
 {
     socket_server->serverSendMessage(VMManagerProtocol::ManagerMessage::GlobalConfigurationChanged);
+}
+
+void
+VMManagerSystem::requestMediaAction(quint64 request_id, const QJsonObject &action)
+{
+    if (!isProcessRunning()) {
+        // Nothing to load media into; report back immediately so the caller does not wait
+        emit mediaActionResultReceived(request_id,
+                                       QJsonObject { { "error", QStringLiteral("The machine is not running.") } });
+        return;
+    }
+
+    QJsonObject params;
+    params["request_id"] = static_cast<double>(request_id);
+    params["action"]     = action;
+    socket_server->serverSendMessageWithObject(VMManagerProtocol::ManagerMessage::RequestMediaAction, params);
+}
+
+void
+VMManagerSystem::requestKeyInput(quint64 request_id, const QJsonObject &input)
+{
+    if (!isProcessRunning()) {
+        // Nothing to type into; report back immediately so the caller does not wait
+        emit keyInputResultReceived(request_id,
+                                    QJsonObject { { "error", QStringLiteral("The machine is not running.") } });
+        return;
+    }
+
+    QJsonObject params;
+    params["request_id"] = static_cast<double>(request_id);
+    params["input"]      = input;
+    socket_server->serverSendMessageWithObject(VMManagerProtocol::ManagerMessage::RequestKeyInput, params);
+}
+
+void
+VMManagerSystem::requestScreenshot(quint64 request_id, int monitor)
+{
+    if (!isProcessRunning()) {
+        // Nothing to capture; report back immediately so the caller does not wait
+        emit screenshotReceived(request_id, QJsonObject { { "error", QStringLiteral("The machine is not running.") } });
+        return;
+    }
+
+    QJsonObject params;
+    params["request_id"] = static_cast<double>(request_id);
+    params["monitor"]    = monitor;
+    socket_server->serverSendMessageWithObject(VMManagerProtocol::ManagerMessage::RequestScreenshot, params);
+}
+
+void
+VMManagerSystem::requestPerformance(quint64 request_id)
+{
+    if (!isProcessRunning()) {
+        // Nothing to sample; report back immediately so the caller does not wait
+        QJsonObject empty_stats;
+        emit        performanceStatsReceived(request_id, empty_stats);
+        return;
+    }
+
+    QJsonObject params;
+    params["request_id"] = static_cast<double>(request_id);
+    socket_server->serverSendMessageWithObject(VMManagerProtocol::ManagerMessage::RequestPerformance, params);
 }
 
 void

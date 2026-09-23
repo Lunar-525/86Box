@@ -25,6 +25,9 @@ namespace Ui {
 class VMManagerMainWindow;
 }
 
+class McpServer;
+class McpTools86Box;
+
 class VMManagerMainWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -47,6 +50,13 @@ private:
     QLabel        *statusRight;
     QIcon          runIcon;
     QIcon          pauseIcon;
+
+    // MCP server and the 86Box tools it exposes (null when disabled)
+    McpServer     *mcp_server = nullptr;
+    McpTools86Box *mcp_tools  = nullptr;
+
+    // Starts, stops or restarts the MCP server according to the preferences
+    void applyMcpSettings(bool interactive);
 
 public slots:
     void setStatusLeft(const QString &text) const;

@@ -180,6 +180,33 @@ VMManagerClientSocket::jsonReceived(const QJsonObject &json)
         case VMManagerProtocol::ManagerMessage::RequestStatus:
             qDebug("Status request command received from manager");
             break;
+        case VMManagerProtocol::ManagerMessage::RequestPerformance:
+            {
+                const QJsonObject params = VMManagerProtocol::getParams(json);
+                emit performanceRequested(params.value("request_id").toVariant().toULongLong());
+                break;
+            }
+        case VMManagerProtocol::ManagerMessage::RequestScreenshot:
+            {
+                const QJsonObject params = VMManagerProtocol::getParams(json);
+                emit screenshotRequested(params.value("request_id").toVariant().toULongLong(),
+                                         params.value("monitor").toInt(1) - 1);
+                break;
+            }
+        case VMManagerProtocol::ManagerMessage::RequestKeyInput:
+            {
+                const QJsonObject params = VMManagerProtocol::getParams(json);
+                emit keyInputRequested(params.value("request_id").toVariant().toULongLong(),
+                                       params.value("input").toObject());
+                break;
+            }
+        case VMManagerProtocol::ManagerMessage::RequestMediaAction:
+            {
+                const QJsonObject params = VMManagerProtocol::getParams(json);
+                emit mediaActionRequested(params.value("request_id").toVariant().toULongLong(),
+                                          params.value("action").toObject());
+                break;
+            }
         case VMManagerProtocol::ManagerMessage::GlobalConfigurationChanged:
             {
                 config_load_global();
@@ -240,6 +267,42 @@ VMManagerClientSocket::sendWinIdMessage(WId id)
     QJsonObject extra_object;
     extra_object["params"] = static_cast<int>(id);
     sendMessageWithObject(VMManagerProtocol::ClientMessage::WinIdMessage, extra_object);
+}
+
+void
+VMManagerClientSocket::sendPerformanceStats(quint64 request_id, const QJsonObject &stats) const
+{
+    QJsonObject extra_object;
+    extra_object["request_id"] = static_cast<double>(request_id);
+    extra_object["stats"]      = stats;
+    sendMessageWithObject(VMManagerProtocol::ClientMessage::PerformanceStats, extra_object);
+}
+
+void
+VMManagerClientSocket::sendScreenshot(quint64 request_id, const QJsonObject &screenshot) const
+{
+    QJsonObject extra_object;
+    extra_object["request_id"] = static_cast<double>(request_id);
+    extra_object["screenshot"] = screenshot;
+    sendMessageWithObject(VMManagerProtocol::ClientMessage::ScreenshotData, extra_object);
+}
+
+void
+VMManagerClientSocket::sendKeyInputResult(quint64 request_id, const QJsonObject &result) const
+{
+    QJsonObject extra_object;
+    extra_object["request_id"] = static_cast<double>(request_id);
+    extra_object["result"]     = result;
+    sendMessageWithObject(VMManagerProtocol::ClientMessage::KeyInputResult, extra_object);
+}
+
+void
+VMManagerClientSocket::sendMediaActionResult(quint64 request_id, const QJsonObject &result) const
+{
+    QJsonObject extra_object;
+    extra_object["request_id"] = static_cast<double>(request_id);
+    extra_object["result"]     = result;
+    sendMessageWithObject(VMManagerProtocol::ClientMessage::MediaActionResult, extra_object);
 }
 
 void

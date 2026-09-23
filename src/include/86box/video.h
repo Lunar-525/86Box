@@ -260,6 +260,13 @@ extern void (*video_recalctimings)(void);
 extern void video_screenshot_monitor(uint32_t *buf, int start_x, int start_y, int row_len, int monitor_index);
 extern void video_screenshot(uint32_t *buf, int start_x, int start_y, int row_len);
 
+/* Copies the current frame of a monitor into caller-owned memory instead of a
+   file. `dst` holds `*w` * `*h` pixels in the 0xXXRRGGBB format of the frame
+   buffers, or may be NULL to ask for the dimensions only. Unlike the file
+   screenshot, this reads the emulated frame buffer directly, so it also works
+   while the machine's window is hidden. Returns 0 on success, -1 otherwise. */
+extern int video_capture_frame_monitor(uint32_t *dst, int *w, int *h, int monitor_index);
+
 #ifdef _WIN32
 extern void * (__cdecl *video_copy)(void *_Dst, const void *_Src, size_t _Size);
 extern void *__cdecl video_transform_copy(void *_Dst, const void *_Src, size_t _Size);

@@ -29,6 +29,14 @@ public:
     bool IPCConnect(const QString &server);
 
     void sendWinIdMessage(WId id);
+    // Reports the sampled performance counters back to the manager
+    void sendPerformanceStats(quint64 request_id, const QJsonObject &stats) const;
+    // Reports a captured screen back to the manager
+    void sendScreenshot(quint64 request_id, const QJsonObject &screenshot) const;
+    // Reports the outcome of an injected keystroke sequence
+    void sendKeyInputResult(quint64 request_id, const QJsonObject &result) const;
+    // Reports the outcome of a media load or eject
+    void sendMediaActionResult(quint64 request_id, const QJsonObject &result) const;
 
 signals:
     void pause();
@@ -38,6 +46,10 @@ signals:
     void request_shutdown();
     void force_shutdown();
     void dialogstatus(bool open);
+    void performanceRequested(quint64 request_id);
+    void screenshotRequested(quint64 request_id, int monitor);
+    void keyInputRequested(quint64 request_id, const QJsonObject &request);
+    void mediaActionRequested(quint64 request_id, const QJsonObject &request);
 
 public slots:
     void clientRunningStateChanged(VMManagerProtocol::RunningState state) const;

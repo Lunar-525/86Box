@@ -121,6 +121,8 @@ public:
     [[nodiscard]] bool   isValid() const;
     [[nodiscard]] bool   isProcessRunning() const;
     [[nodiscard]] qint64 processId() const;
+    // True when the emulator binary this machine would be launched with exists
+    [[nodiscard]] bool   canLaunch();
 public slots:
     void launch86Box(bool settings = false);
     void launchSettings();
@@ -132,6 +134,15 @@ public slots:
     void cadButtonPressed();
     void reloadConfig();
     void sendGlobalConfigurationChanged();
+    // Asks the running emulator for a performance sample; the reply arrives
+    // asynchronously through performanceStatsReceived()
+    void requestPerformance(quint64 request_id);
+    // Asks the running emulator for a screen capture of one monitor (1-based)
+    void requestScreenshot(quint64 request_id, int monitor);
+    // Asks the running emulator to type text or press keys
+    void requestKeyInput(quint64 request_id, const QJsonObject &input);
+    // Asks the running emulator to load or eject media
+    void requestMediaAction(quint64 request_id, const QJsonObject &action);
 
 public:
     QDateTime timestamp();
@@ -161,6 +172,10 @@ signals:
     void clientProcessStatusChanged();
     void configurationChanged(VMManagerSystem *sysconfig);
     void globalConfigurationChanged();
+    void performanceStatsReceived(quint64 request_id, const QJsonObject &stats);
+    void screenshotReceived(quint64 request_id, const QJsonObject &screenshot);
+    void keyInputResultReceived(quint64 request_id, const QJsonObject &result);
+    void mediaActionResultReceived(quint64 request_id, const QJsonObject &result);
 
 private:
     void loadSettings();

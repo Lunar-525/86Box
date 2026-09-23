@@ -97,6 +97,14 @@ VMManagerProtocol::getClientMessageType(const QJsonObject &json_document)
         return VMManagerProtocol::ClientMessage::WinIdMessage;
     else if (message_type == "GlobalConfigurationChanged")
         return VMManagerProtocol::ClientMessage::GlobalConfigurationChanged;
+    else if (message_type == "PerformanceStats")
+        return VMManagerProtocol::ClientMessage::PerformanceStats;
+    else if (message_type == "ScreenshotData")
+        return VMManagerProtocol::ClientMessage::ScreenshotData;
+    else if (message_type == "KeyInputResult")
+        return VMManagerProtocol::ClientMessage::KeyInputResult;
+    else if (message_type == "MediaActionResult")
+        return VMManagerProtocol::ClientMessage::MediaActionResult;
 
     return VMManagerProtocol::ClientMessage::UnknownMessage;
 }
@@ -130,6 +138,18 @@ VMManagerProtocol::getManagerMessageType(const QJsonObject &json_document)
 
     if (message_type == "GlobalConfigurationChanged")
         return VMManagerProtocol::ManagerMessage::GlobalConfigurationChanged;
+
+    if (message_type == "RequestPerformance")
+        return VMManagerProtocol::ManagerMessage::RequestPerformance;
+
+    if (message_type == "RequestScreenshot")
+        return VMManagerProtocol::ManagerMessage::RequestScreenshot;
+
+    if (message_type == "RequestKeyInput")
+        return VMManagerProtocol::ManagerMessage::RequestKeyInput;
+
+    if (message_type == "RequestMediaAction")
+        return VMManagerProtocol::ManagerMessage::RequestMediaAction;
 
     return VMManagerProtocol::ManagerMessage::UnknownMessage;
 }

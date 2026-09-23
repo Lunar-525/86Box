@@ -385,6 +385,45 @@ video_screenshot(uint32_t *buf, int start_x, int start_y, int row_len)
     video_screenshot_monitor(buf, start_x, start_y, row_len, 0);
 }
 
+int
+video_capture_frame_monitor(uint32_t *dst, int *w, int *h, int monitor_index)
+{
+    const blit_data_t *blit_data_ptr = monitors[monitor_index].mon_blit_data_ptr;
+    const bitmap_t    *bitmap        = monitors[monitor_index].target_buffer;
+
+    if ((blit_data_ptr == NULL) || (bitmap == NULL))
+        return -1;
+
+    /* Same geometry the file screenshot uses: the region the video card last
+       rendered into the frame buffer. */
+    const int width  = blit_data_ptr->w;
+    const int height = blit_data_ptr->h;
+
+    if ((width <= 0) || (height <= 0) || (width > 2048) || (height > 2048))
+        return -1;
+    if ((blit_data_ptr->x < 0) || (blit_data_ptr->y < 0))
+        return -1;
+    if (((blit_data_ptr->x + width) > 2048) || ((blit_data_ptr->y + height) > 2112))
+        return -1;
+
+    if (dst != NULL) {
+        for (int y = 0; y < height; y++) {
+            const uint32_t *line = bitmap->line[blit_data_ptr->y + y];
+            if (line == NULL)
+                return -1;
+            memcpy(&(dst[(size_t) y * (size_t) width]), &(line[blit_data_ptr->x]),
+                   (size_t) width * sizeof(uint32_t));
+        }
+    }
+
+    if (w != NULL)
+        *w = width;
+    if (h != NULL)
+        *h = height;
+
+    return 0;
+}
+
 #ifdef _WIN32
 void *__cdecl video_transform_copy(void *_Dst, const void *_Src, size_t _Size)
 #else

@@ -12,6 +12,7 @@
  *          cpu_time_*, cache_sim_* and mem_access_* modules.
  */
 #include "qt_performance.hpp"
+#include "qt_mcp_perf.hpp"
 #include "ui_qt_performance.h"
 
 extern "C" {
@@ -158,6 +159,7 @@ Performance::Performance(QWidget *parent)
     /* Enable the gated monitors while this window is open. */
     mem_access_set_enabled(1);
     cache_sim_set_enabled(1);
+    McpPerf::set_viewer_open(true);
 
     last_guest_ns = cpu_time_guest_ns_get();
     last_real_ns  = cpu_time_real_ns_get();
@@ -184,6 +186,7 @@ Performance::~Performance()
 {
     cache_sim_set_enabled(0);
     mem_access_set_enabled(0);
+    McpPerf::set_viewer_open(false);
     delete ui;
 }
 

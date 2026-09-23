@@ -134,6 +134,23 @@ VMManagerServerSocket::serverSendMessage(VMManagerProtocol::ManagerMessage proto
 }
 
 void
+VMManagerServerSocket::serverSendMessageWithObject(VMManagerProtocol::ManagerMessage protocol_message, const QJsonObject &params) const
+{
+    if (!socket) {
+        qInfo("Cannot send message: Invalid socket");
+        return;
+    }
+
+    QDataStream stream(socket);
+    stream.setVersion(QDataStream::Qt_5_7);
+    auto packet      = new VMManagerProtocol(VMManagerProtocol::Sender::Manager);
+    auto jsonMessage = packet->protocolManagerMessage(protocol_message);
+    if (!params.isEmpty())
+        jsonMessage["params"] = params;
+    stream << QJsonDocument(jsonMessage).toJson(QJsonDocument::Compact);
+}
+
+void
 VMManagerServerSocket::serverDisconnected()
 {
     qInfo("Connection disconnected");
@@ -193,6 +210,38 @@ VMManagerServerSocket::jsonReceived(const QJsonObject &json)
         case VMManagerProtocol::ClientMessage::GlobalConfigurationChanged:
             qDebug("Global configuration change received from client");
             emit globalConfigurationChanged();
+            break;
+        case VMManagerProtocol::ClientMessage::PerformanceStats:
+            qDebug("Performance statistics received from client");
+            params_object = VMManagerProtocol::getParams(json);
+            if (!params_object.isEmpty()) {
+                const quint64 request_id = params_object.value("request_id").toVariant().toULongLong();
+                emit          performanceStatsReceived(request_id, params_object.value("stats").toObject());
+            }
+            break;
+        case VMManagerProtocol::ClientMessage::ScreenshotData:
+            qDebug("Screenshot received from client");
+            params_object = VMManagerProtocol::getParams(json);
+            if (!params_object.isEmpty()) {
+                const quint64 request_id = params_object.value("request_id").toVariant().toULongLong();
+                emit          screenshotReceived(request_id, params_object.value("screenshot").toObject());
+            }
+            break;
+        case VMManagerProtocol::ClientMessage::KeyInputResult:
+            qDebug("Key input result received from client");
+            params_object = VMManagerProtocol::getParams(json);
+            if (!params_object.isEmpty()) {
+                const quint64 request_id = params_object.value("request_id").toVariant().toULongLong();
+                emit          keyInputResultReceived(request_id, params_object.value("result").toObject());
+            }
+            break;
+        case VMManagerProtocol::ClientMessage::MediaActionResult:
+            qDebug("Media action result received from client");
+            params_object = VMManagerProtocol::getParams(json);
+            if (!params_object.isEmpty()) {
+                const quint64 request_id = params_object.value("request_id").toVariant().toULongLong();
+                emit          mediaActionResultReceived(request_id, params_object.value("result").toObject());
+            }
             break;
         default:
             qDebug("Unknown client message type received:");
