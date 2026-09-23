@@ -666,8 +666,12 @@ exec386_dynarec_dyn(void)
     {
         void (*code)(void) = (void *) &block->data[BLOCK_START];
 
+#    ifdef USE_NEW_DYNAREC
+        /* Block execution accounting only exists for the new recompiler, whose
+           block table pp_block_execute() indexes. */
         if (pp_enabled)
             pp_block_execute(get_block_nr(block));
+#    endif
 
 #    ifndef USE_NEW_DYNAREC
         codeblock_hash[hash] = block;
